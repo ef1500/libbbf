@@ -20,6 +20,33 @@ BBF is designed as a Footer-indexed binary format. This allows for rapid append-
 7. **Metadata Table**: Key-Value pairs for archival data (Author, Scanlation team, etc.).
 8. **Footer (76 bytes)**: Table offsets and a final integrity hash.
 
+### Feature Comparison: Digital Comic & Archival Formats
+
+| Feature | **BBF** | CBZ (Zip) | CBR (Rar) | PDF | EPUB | Folder |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Random Page Access** | ✅ | ❌ | ❌ | ✅ | ❌ | ✅ |
+| **Native Data Deduplication** | ✅ | ❌ | ❌ | ⚠️ [1] | ❌ | ❌ |
+| **Per-Asset Integrity (XXH3)** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **4KB Sector Alignment** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Native Sections/Chapters** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| **Arbitrary Metadata (UTF-8)** | ✅ | ⚠️ [2] | ❌ | ✅ | ✅ | ❌ |
+| **Mixed-Codec Support** | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| **DirectStorage/mmap Ready** | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ [3] |
+| **Low Parser Complexity** | ✅ | ⚠️ [4] | ❌ | ❌ | ❌ | ✅ |
+| **Bit-Rot Detection** | ✅ | ⚠️ [5] | ⚠️ [5] | ❌ | ❌ | ❌ |
+| **Streaming-Friendly Index** | ⚠️ [6] | ⚠️ [6] | ❌ | ✅ [7] | ⚠️ | ❌ |
+| **Wide Software Support** | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+<font size="2">
+[1] - PDF supports XObjects to reuse resources, but lacks native content-hash deduplication; identical images must be manually referenced.<br/>
+[2] - CBZ does not support metadata natively in the ZIP spec; it relies on unofficial sidecar files like <code>ComicInfo.xml</code>.<br/>
+[3] - While folders allow memory mapping, individual images within them are rarely sector-aligned for optimized DirectStorage throughput.<br/>
+[4] - ZIP/RAR require large, complex libraries (zlib/libarchive); BBF is a "Plain Old Data" (POD) format requiring only a few lines of C++ to parse.<br/>
+[5] - ZIP/RAR use CRC32, which is aging, collision-prone, and significantly slower to verify than XXH3 for large archival collections.<br/>
+[6] - Because the index is at the end (Footer), web-based streaming requires a "Range Request" to the end of the file before reading pages.<br/>
+[7] - PDF supports "Linearization" (Fast Web View), allowing the header and first pages to be read before the rest of the file is downloaded.<br/>
+</font>
+
 ### 4KB Alignment & DirectStorage
 Every asset in a BBF file starts on a 4KB boundary. This alignment is critical for modern NVMe-based systems. It allows developers to utilize `mmap` or **DirectStorage** to transfer image data directly from disk to GPU memory, bypassing the CPU-bottlenecked "copy and decompress" cycles found in Zip-based formats.
 
