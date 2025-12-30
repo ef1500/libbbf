@@ -1,0 +1,42 @@
+name: Build Binaries
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: bbfmux-linux
+            binary_name: bbfmux
+            compile_cmd: g++ -std=c++17 src/bbfenc.cpp src/libbbf.cpp src/xxhash.c -o bbfmux -pthread
+          - os: windows-latest
+            artifact_name: bbfmux-windows
+            binary_name: bbfmux.exe
+            compile_cmd: g++ -std=c++17 src/bbfenc.cpp src/libbbf.cpp src/xxhash.c -o bbfmux.exe -municode
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compile (Linux)
+        if: runner.os == 'Linux'
+        run: ${{ matrix.compile_cmd }}
+
+      - name: Compile (Windows)
+        if: runner.os == 'Windows'
+        run: ${{ matrix.compile_cmd }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.binary_name }}
