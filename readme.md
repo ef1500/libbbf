@@ -1,8 +1,6 @@
 # libbbf: Bound Book Format
 
 ![alt text](https://img.shields.io/badge/Format-BBF1-blue.svg)
-
-
 ![alt text](https://img.shields.io/badge/License-MIT-green.svg)
 
 Bound Book Format (.bbf) is a high-performance binary container designed specifically for digital comic books and manga. Unlike CBR/CBZ, BBF is built for DirectSotrage/mmap, easy integrity checks, and mixed-codec containerization.
@@ -26,6 +24,8 @@ Windows
 g++ -std=c++17 bbfenc.cpp libbbf.cpp xxhash.c -o bbfmux -municode
 ```
 
+Alternatively, if you need python support, use [libbbf-python](github.com/ef1500/libbbf-python). 
+
 ---
 
 ## Technical Details
@@ -36,7 +36,7 @@ BBF is designed as a Footer-indexed binary format. This allows for rapid append-
 The `bbfmux` reference implementation utilizes **Memory Mapping (mmap/MapViewOfFile)**. Instead of reading file data into intermediate buffers, the tool maps the container directly into the process address space. This allows the CPU to access image data at the speed of your NVMe drive's hardware limit.
 
 ### High-Speed Parallel Verification
-Integrity checks now utilize **Parallel XXH3**. On multi-core systems, the verifier splits the asset table into chunks and validates multiple pages simultaneously. This makes BBF verification up to **10x faster** than ZIP/RAR CRC checks.
+Integrity checks utilize **Parallel XXH3**. On multi-core systems, the verifier splits the asset table into chunks and validates multiple pages simultaneously. This makes BBF verification up to **10x faster** than ZIP/RAR CRC checks.
 
 ### 4KB Alignment
 Every asset in a BBF file starts on a **4096-byte boundary**. This alignment is critical for modern hardware, allowing for DirectStorage transfers directly from disk to GPU memory, bypassing CPU bottlenecks entirely.
@@ -45,12 +45,14 @@ Every asset in a BBF file starts on a **4096-byte boundary**. This alignment is 
 ### Binary Layout
 1. **Header (13 bytes)**: Magic `BBF1`, versioning, and initial padding.
 2. **Page Data**: The raw image payloads (AVIF, PNG, etc.), each padded to **4096-byte boundaries**.
-3. **String Pool**: A deduplicated pool of null-terminated strings for metadata and section titles.
-4. **Asset Table**: A registry of physical data blobs with XXH3 hashes.
-5. **Page Table**: The logical reading order, mapping logical pages to assets.
-6. **Section Table**: Markers for chapters, volumes, or gallery sections.
-7. **Metadata Table**: Key-Value pairs for archival data (Author, Scanlation team, etc.).
-8. **Footer (76 bytes)**: Table offsets and a final integrity hash.
+4. **String Pool**: A deduplicated pool of null-terminated strings for metadata and section titles.
+5. **Asset Table**: A registry of physical data blobs with XXH3 hashes.
+6. **Page Table**: The logical reading order, mapping logical pages to assets.
+7. **Section Table**: Markers for chapters, volumes, or gallery sections.
+8. **Metadata Table**: Key-Value pairs for archival data (Author, Scanlation team, etc.).
+9. **Footer (76 bytes)**: Table offsets and a final integrity hash.
+
+NOTE: `libbbf.h` includes a `flags` field, as well as extra padding for each asset entry. This is so that in the future `libbbf` can accomodate future technical advancements in both readers and image storage.
 
 ### Feature Comparison: Digital Comic & Archival Formats
 
@@ -103,14 +105,14 @@ The included `bbfmux` tool is a reference implementation for creating and managi
 The `bbfmux` utility provides a powerful interface for managing Bound Book files:
 
 *   **Flexible Ingestion**: Create books by passing individual files, entire directories, or a mix of both.
-*   **Logical Structuring**: Add named **Sections** (Chapters, Volumes, Galleries) to define the internal hierarchy of the book.
+*   **Logical Structuring**: Add named **Sections** (Chapters, Volumes, Extras, Galleries) to define the internal hierarchy of the book.
 *   **Custom Metadata**: Embed arbitrary Key:Value pairs into the global string pool for archival indexing.
 *   **Content-Aware Extraction**: Extract the entire book or target specific sections by name.
 
 ## Usage Examples
 
 ### Create a new BBF
-You can mix individual images and folders. `bbfmux` sorts inputs alphabetically, deduplicates identical assets, and aligns data to 4096-byte boundaries.
+You can mix individual images and folders. `bbfmux` sorts inputs alphabetically, deduplicates identical assets, and aligns data to 4096-byte boundaries. See [Advanced CLI Usage](https://github.com/ef1500/libbbf?tab=readme-ov-file#advanced-cli-features) for how to specify your own custom page orders.
 
 ```bash
 # Basic creation with metadata
@@ -159,12 +161,14 @@ bbfmux input.bbf --extract --outdir="./unpacked_book"
 ### View Metadata & Structure
 View the version, page count, deduplication stats, hierarchical sections, and all embedded metadata.
 ```bash
-bbfmux input.bbf --info
+bbfmux input_book.bbf --info
 ```
 
 ---
 
 ## Advanced CLI Features
+
+`bbfmux` also supports more advanced options, allowing full-control over your `.bbf` files.
 
 ### Custom Page Ordering (`--order`)
 You can precisely control the reading order using a text file or inline arguments.
@@ -219,7 +223,7 @@ The `--rangekey` option allows you to extract a range of sections. The extractor
 bbfmux manga.bbf --extract --section="Chapter 2" --rangekey="Chapter 4" --outdir="./Ch2_to_Ch4"
 
 # Extract Volume 2 until it encounters the string "Chapter 60"
-bbfmux manga.bbf --extract --section="Volume 2" --rangekey="Chapter 60"
+bbfmux manga.bbf --extract --section="Volume 2" --rangekey="Chapter 60" --outdir="./Volume_2_to_Chapter_60"
 ```
 
 ---
