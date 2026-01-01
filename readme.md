@@ -24,7 +24,7 @@ Windows
 g++ -std=c++17 bbfenc.cpp libbbf.cpp xxhash.c -o bbfmux -municode
 ```
 
-Alternatively, if you need python support, use [libbbf-python](github.com/ef1500/libbbf-python). 
+Alternatively, if you need python support, use [libbbf-python](https://github.com/ef1500/libbbf-python). 
 
 ---
 
