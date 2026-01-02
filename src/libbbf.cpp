@@ -3,6 +3,9 @@
 
 #include <iostream>
 #include <vector>
+#include <algorithm>
+#include <string>
+#include <cctype>
 
 BBFBuilder::BBFBuilder(const std::string& outputFilename) : currentOffset(0)
 {
@@ -22,7 +25,9 @@ BBFBuilder::BBFBuilder(const std::string& outputFilename) : currentOffset(0)
     header.magic[1] = 'B';
     header.magic[2] = 'F';
     header.magic[3] = '1';
-    header.version = 1;
+    header.version = 2;
+    header.flags = 0; // reserved for now as well.
+    header.headerLen = sizeof(BBFHeader);
     header.reserved = 0; // Reserved for future expansions
 
     // Write the header
@@ -92,16 +97,19 @@ bool BBFBuilder::addPage(const std::string& imagePath, uint8_t type, uint32_t fl
         // No dupe found. create a new asset.
         alignPadding(); // start by allocating necessary padding.
 
-        BBFAssetEntry newAsset;
+        BBFAssetEntry newAsset = {0};
         newAsset.offset = currentOffset;
         newAsset.length = size;
+        newAsset.decodedLength = size;
         newAsset.xxh3Hash = hash;
         newAsset.type = type;
+        newAsset.flags = 0; // no flags yet.
 
-        for ( int i = 0; i < 7; i++ )
-        {
-            newAsset.reserved[i] = 0; // Add in the reserved bytes.
-        }
+        // set reserved equal to zero
+        //newAsset.reserved[4] = {0};
+
+        // same for padding
+        //newAsset.padding[7] = {0};
 
         fileStream.write(buffer.data(), size);
         currentOffset += size;
@@ -160,8 +168,6 @@ bool BBFBuilder::addMetadata(const std::string& key, const std::string& value)
 
 bool BBFBuilder::finalize()
 {
-    uint64_t indexStart = currentOffset;
-
     // Initialize XXH3 State
     XXH3_state_t* const state = XXH3_createState();
     if (state == nullptr) return false;
@@ -178,6 +184,7 @@ bool BBFBuilder::finalize()
     //write footer
     BBFFooter footer;
     footer.stringPoolOffset = currentOffset;
+    footer.extraOffset = 0; // set the extraOffset to 0 since we aren't using it.
 
     //fileStream.write(stringPool.data(), stringPool.size());
     //currentOffset += stringPool.size();
@@ -230,4 +237,42 @@ bool BBFBuilder::finalize()
     fileStream.write(reinterpret_cast<char*>(&footer), sizeof(BBFFooter));
     fileStream.close();
     return true;
+}
+
+BBFMediaType detectTypeFromExtension(const std::string &extension) 
+{
+    std::string ext = extension;
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+    if (ext == ".png") return BBFMediaType::PNG;
+    if (ext == ".jpg" || ext == ".jpeg") return BBFMediaType::JPG;
+    if (ext == ".avif") return BBFMediaType::AVIF;
+    if (ext == ".webp") return BBFMediaType::WEBP;
+    if (ext == ".jxl") return BBFMediaType::JXL;
+    if (ext == ".bmp") return BBFMediaType::BMP;
+    if (ext == ".gif") return BBFMediaType::GIF;
+    if (ext == ".tiff") return BBFMediaType::TIFF;
+    
+    return BBFMediaType::UNKNOWN;
+}
+
+std::string MediaTypeToStr(uint8_t type)
+{
+    BBFMediaType mediaType = static_cast<BBFMediaType>(type);
+
+    switch (mediaType)
+    {
+        case BBFMediaType::AVIF: return ".avif";
+        case BBFMediaType::PNG:  return ".png";
+        case BBFMediaType::JPG:  return ".jpg";
+        case BBFMediaType::WEBP: return ".webp";
+        case BBFMediaType::JXL:  return ".jxl";
+        case BBFMediaType::BMP:  return ".bmp";
+        case BBFMediaType::GIF:  return ".gif";
+        case BBFMediaType::TIFF: return ".tiff";
+
+        case BBFMediaType::UNKNOWN: 
+        default: 
+            return ".png"; 
+    }
 }

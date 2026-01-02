@@ -1,3 +1,5 @@
+#define NOMINMAX
+
 #include "libbbf.h"
 #include "xxhash.h"
 #include <iostream>
@@ -133,13 +135,23 @@ public:
     {
         if (!mmap.map(path))
             return false;
+        
+        // Basic size check
         if (mmap.size < sizeof(BBFHeader) + sizeof(BBFFooter))
             return false;
 
+        // Read the fixed-size part of the header first
         std::memcpy(&header, mmap.data, sizeof(BBFHeader));
+        
         if (std::memcmp(header.magic, "BBF1", 4) != 0)
             return false;
 
+        // FUTURE PROOFING: 
+        // If header.headerLen > sizeof(BBFHeader), we know there is extra data 
+        // in the header we should ignore. We don't need to do anything right now 
+        // because we read assets via absolute offsets, but it's good to know.
+
+        // Read Footer
         std::memcpy(&footer, (uint8_t *)mmap.data + mmap.size - sizeof(BBFFooter), sizeof(BBFFooter));
         if (std::memcmp(footer.magic, "BBF1", 4) != 0)
             return false;
@@ -574,9 +586,13 @@ int main(int argc, char *argv[])
             for (uint32_t i = start; i < end; ++i)
             {
                 const auto &asset = assets[pages[i].assetIndex];
-                std::string outPath = (fs::path(outDir) / ("p" + std::to_string(i + 1) + ((asset.type == 1) ? ".avif" : ".png"))).string();
 
-                // Optimized: Direct write from mapped memory
+                // FIX: Use the library function to get the extension
+                // This automatically handles PNG, JPG, AVIF, JXL, etc.
+                std::string ext = MediaTypeToStr(asset.type);
+
+                std::string outPath = (fs::path(outDir) / ("p" + std::to_string(i + 1) + ext)).string();
+
                 std::ofstream ofs(outPath, std::ios::binary);
                 ofs.write((const char *)reader.mmap.data + asset.offset, asset.length);
             }
@@ -686,7 +702,8 @@ int main(int argc, char *argv[])
         for (uint32_t i = 0; i < manifest.size(); ++i)
         {
             std::string ext = fs::path(manifest[i].path).extension().string();
-            uint8_t type = (ext == ".avif" || ext == ".AVIF") ? 1 : 2;
+            BBFMediaType mediaType = detectTypeFromExtension(ext);
+            uint8_t type = static_cast<uint8_t>(mediaType);
             builder.addPage(manifest[i].path, type);
             fileToPage[manifest[i].filename] = i;
         }

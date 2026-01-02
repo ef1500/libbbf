@@ -7,13 +7,31 @@
 #include <fstream>
 #include <unordered_map>
 
-#pragma pack(push, 1)
+// ENUM for filetypes
+enum class BBFMediaType: uint8_t
+{
+    UNKNOWN = 0x00,
+    AVIF = 0x01,
+    PNG = 0x02,
+    WEBP = 0x03,
+    JXL = 0x04,
+    BMP = 0x05,
+    GIF = 0x07,
+    TIFF = 0x08,
+    JPG = 0x09
+};
 
+BBFMediaType detectTypeFromExtension(const std::string &extension);
+std::string MediaTypeToStr(uint8_t type);
+
+#pragma pack(push, 1)
 
 struct BBFHeader
 {
     uint8_t magic[4]; // 0x42424631 (BBF1)
-    uint8_t version; // 1
+    uint8_t version; // Major version, 1
+    uint32_t flags; // Reserved for now
+    uint16_t headerLen; // Size of header
     uint64_t reserved; // set to 0
 };
 
@@ -22,9 +40,14 @@ struct BBFAssetEntry
 {
     uint64_t offset; // Offset of the page
     uint64_t length; // length of the file
+    uint64_t decodedLength;
     uint64_t xxh3Hash; // Hash of image
+
     uint8_t type; // 0x01 - AVIF, 0x02 PNG, 0x03 JPG ... etc.
-    uint8_t reserved[7]; // padding. Could use this in the future.
+    uint8_t flags; // i.e. encryped or compressed
+
+    uint8_t padding[6]; // 64 BYTE struct
+    uint64_t reserved[3]; // Reserved. Future proofing.
 };
 
 // Create reading order
@@ -49,6 +72,16 @@ struct BBFMetadata
     uint32_t valOffset; // offset into String pool
 };
 
+// BBF Extension table (Generic, not used)
+struct BBFExpansionHeader
+{
+    uint32_t extensionType;
+    uint32_t padding;
+    uint64_t offset;
+    uint64_t flags;
+    uint64_t length;
+};
+
 // Create the footer
 struct BBFFooter
 {
@@ -65,6 +98,8 @@ struct BBFFooter
     uint64_t metaTableOffset;
     uint32_t keyCount;
 
+    uint64_t extraOffset; // Point to an extra table in the future if we need.
+
     uint64_t indexHash; // Integrity check, hash of everything between index start and the current position.
     uint8_t magic[4]; // 0x42424631 (BBF1) (Verification)
 };
@@ -74,7 +109,7 @@ struct BBFFooter
 class BBFBuilder
 {
     public:
-        BBFBuilder(const std::string &outputFilemame);
+        BBFBuilder(const std::string &outputFilename);
         ~BBFBuilder();
 
         bool addPage(const std::string& imagePath, uint8_t type, uint32_t flags = 0);
