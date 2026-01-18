@@ -3,7 +3,7 @@
 ![alt text](https://img.shields.io/badge/Format-BBF1-blue.svg)
 ![alt text](https://img.shields.io/badge/License-MIT-green.svg)
 
-# Official Source Notice: Please only download releases from this repository. External mirrors or forks may contain malware. 
+# Official Source Notice: Please only download releases from this repository (ef1500/libbbf). External mirrors or forks may contain malware. 
 
 Bound Book Format (.bbf) is a high-performance binary container designed specifically for digital comic books and manga. Unlike CBR/CBZ, BBF is built for DirectSotrage/mmap, easy integrity checks, and mixed-codec containerization.
 
