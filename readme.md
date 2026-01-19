@@ -1,4 +1,4 @@
-# libbbf: Bound Book Format
+# libbbf: Bound Book Format 
 
 ![alt text](https://img.shields.io/badge/Format-BBF1-blue.svg)
 ![alt text](https://img.shields.io/badge/License-MIT-green.svg)
