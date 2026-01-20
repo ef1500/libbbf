@@ -13,10 +13,21 @@ Bound Book Format (.bbf) is a high-performance binary container designed specifi
 ## Getting Started
 
 ### Prerequisites
-- C++17 compliant compiler (GCC/Clang/MSVC)
+- C++17 compliant compiler (GCC/Clang/MSVC), and optionally CMake
 - [xxHash](https://github.com/Cyan4973/xxHash) library
 
 ### Compilation
+
+#### CMake
+
+```bash
+cmake -B build
+cmake --build build
+sudo cmake --install build
+```
+
+#### Manual
+
 Linux
 ```bash
 g++ -std=c++17 bbfenc.cpp libbbf.cpp xxhash.c -o bbfmux -pthread
