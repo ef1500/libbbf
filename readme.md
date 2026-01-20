@@ -84,6 +84,12 @@ NOTE: `libbbf.h` includes a `flags` field, as well as extra padding for each ass
 [7] - PDF supports "Linearization" (Fast Web View), allowing the header and first pages to be read before the rest of the file is downloaded.<br/>
 </font>
 
+### Graphical Comparison (BBF vs. CBZ)
+
+<img width="3321" height="2010" alt="graphcombined" src="https://github.com/user-attachments/assets/e99674ac-85c8-49d1-a8d6-7ee22803dde8" />
+
+
+
 ---
 
 ## Features
