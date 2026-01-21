@@ -46,7 +46,7 @@ Alternatively, if you need python support, use [libbbf-python](https://github.co
 
 BBF is designed as a Footer-indexed binary format. This allows for rapid append-only creation and immediate random access to any page without scanning the entire file.
 
-### Zero-Copy Architecture
+### MMAP Compatibility
 The `bbfmux` reference implementation utilizes **Memory Mapping (mmap/MapViewOfFile)**. Instead of reading file data into intermediate buffers, the tool maps the container directly into the process address space. This allows the CPU to access image data at the speed of your NVMe drive's hardware limit.
 
 ### High-Speed Parallel Verification
@@ -55,6 +55,7 @@ Integrity checks utilize **Parallel XXH3**. On multi-core systems, the verifier 
 ### 4KB Alignment
 Every asset in a BBF file starts on a **4096-byte boundary**. This alignment is critical for modern hardware, allowing for DirectStorage transfers directly from disk to GPU memory, bypassing CPU bottlenecks entirely.
 
+Note: DirectStorage isn't avaliable for images yet (as far as I know), but I've made sure to accomodate such a thing in the future with this format.
 
 ### Binary Layout
 1. **Header (13 bytes)**: Magic `BBF1`, versioning, and initial padding.
