@@ -6,7 +6,7 @@
 > [!WARNING]
 > **Official Source Notice: Please only download releases from this repository (ef1500/libbbf). External mirrors or forks may contain malware.**
 
-Bound Book Format (.bbf) is a high-performance binary container designed specifically for digital comic books and manga. Unlike CBR/CBZ, BBF is built for DirectSotrage/mmap, easy integrity checks, and mixed-codec containerization.
+Bound Book Format (.bbf) is a high-performance binary container designed specifically for digital comic books and manga. Unlike CBR/CBZ, BBF is built for DirectStorage/mmap, easy integrity checks, and mixed-codec containerization.
 
 ---
 
