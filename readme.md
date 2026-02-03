@@ -206,39 +206,6 @@ The `bbfmux` utility provides an example interface for managing Bound Book files
 You can mix individual images and folders. `bbfmux` sorts inputs alphabetically, deduplicates identical assets, and aligns data to user-defined boundaries (2^N).
 
 ```bash
-> ./bbfmux --help
-
-========[ BBFMUX v3.0 ]====================================================
-| Bound Book Format Muxer                             Developed by EF1500 |
-===========================================================================
-
-USAGE: bbfmux <INPUT_DIR|BBF_FILE> [MODE] [OPTIONS]...
-
-MODES (Mutually Exclusive):
-  (Default)    Mux folder contents into a BBF container
-  --info       Display headers, metadata, and statistics
-  --verify     Validate XXH3-128/64 hashes
-  --extract    Unpack contents to disk
-  --petrify    Linearize BBF file for faster reading
-
-MUXER OPTIONS:
-  --meta=K:V[:P]         Add metadata (Key:Value[:Parent])
-  --metafile=<FILE>      Read K:V:P entries from file
-  --section=N:T[:P]      Add section (Name:Target[:Parent])
-  --sections=<FILE>      Read section entries from file
-  --ream-size=<N>        Ream size exponent override (2^N)
-  --alignment=<N>        Byte alignment exponent override (2^N)
-  --variable-ream-size   Enable variable ream sizing (reccomended)
-
-VERIFY OPTIONS:
-  --section="NAME"    Target specific section
-  --asset=<ID>        Target specific asset ID
-
-INFO FLAGS:
-  --hashes, --footer, --sections, --counts, --header, --metadata, --offsets
-```
-
-```bash
 # Basic creation with metadata
 bbfmux ./chapter1/ \
   --meta=Title:"Akira" \
