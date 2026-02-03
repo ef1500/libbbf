@@ -3,58 +3,109 @@ name: Release Binaries
 on:
   push:
     tags:
-      - 'v*' # Trigger on vx.x.x
+      - 'v*'
+  workflow_dispatch: # Allows manual testing
 
 permissions:
-  contents: write # Required to create a release and upload assets
+  contents: write
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            binary_name: bbfmux
-            compile_cmd: g++ -std=c++17 src/bbfenc.cpp src/libbbf.cpp src/xxhash.c -o bbfmux -pthread
-          - os: windows-latest
-            binary_name: bbfmux.exe
-            compile_cmd: g++ -std=c++17 src/bbfenc.cpp src/libbbf.cpp src/xxhash.c -o bbfmux.exe -municode -static-libgcc -static-libstdc++ -static
+          - target: linux-x64
+            os: ubuntu-20.04
+            output_name: bbfmux
+            cmake_target: bbfmux
+            # Make Static
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Release 
+              -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          
+          - target: windows-x64
+            os: windows-latest
+            output_name: bbfmux.exe
+            cmake_target: bbfmux
+            # Static (#3)
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Release 
+              -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+
+          - target: wasm
+            os: ubuntu-latest
+            output_name: libbbf_wasm.js
+            cmake_target: libbbf_wasm
+            is_wasm: true
+            cmake_flags: -DCMAKE_BUILD_TYPE=Release
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Compile
-        run: ${{ matrix.compile_cmd }}
+      - name: Setup Emscripten
+        if: matrix.is_wasm
+        uses: mymindstorm/setup-emsdk@v14
 
-      - name: Upload temporary artifact
+      - name: Configure CMake
+        run: >
+          ${{ matrix.is_wasm && 'emcmake' || '' }} cmake -B build 
+          ${{ matrix.cmake_flags }}
+          -DPROJECT_VERSION="${{ github.ref_name || '0.0.1' }}"
+
+      - name: Build
+        # We use the specific target from the matrix (bbfmux OR libbbf_wasm)
+        run: cmake --build build --config Release --target ${{ matrix.cmake_target }}
+
+      - name: Prepare Artifact
+        shell: bash
+        run: |
+          mkdir -p out/
+
+          if [ "${{ matrix.is_wasm }}" = "true" ]; then
+             cp bin/libbbf_wasm.js out/
+             cp bin/libbbf_wasm.wasm out/
+          else
+             if [ -f "bin/Release/${{ matrix.output_name }}" ]; then
+               cp "bin/Release/${{ matrix.output_name }}" out/
+             elif [ -f "bin/${{ matrix.output_name }}" ]; then
+               cp "bin/${{ matrix.output_name }}" out/
+             else
+               echo "::error::Could not find binary ${{ matrix.output_name }} in bin/ or bin/Release/"
+               ls -R bin/
+               exit 1
+             fi
+          fi
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-bin
-          path: ${{ matrix.binary_name }}
+          name: ${{ matrix.target }}-binary
+          path: out/*
 
   create_release:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: bin-temp
           merge-multiple: true
 
-      - name: Create Release and Upload Assets
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             bin-temp/bbfmux
             bin-temp/bbfmux.exe
-          generate_release_notes: true # Automatically summarizes commits since last release
-          draft: false
-          prerelease: false
+            bin-temp/libbbf_wasm.js
+            bin-temp/libbbf_wasm.wasm
+          generate_release_notes: true
