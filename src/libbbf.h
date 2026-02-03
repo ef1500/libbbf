@@ -1,141 +1,144 @@
+// LIBBBF_H
 #ifndef LIBBBF_H
 #define LIBBBF_H
 
-#include <cstdint>
-#include <vector>
-#include <string>
-#include <fstream>
-#include <unordered_map>
+#include <stdint.h>
 
-// ENUM for filetypes
-enum class BBFMediaType: uint8_t
-{
-    UNKNOWN = 0x00,
-    AVIF = 0x01,
-    PNG = 0x02,
-    WEBP = 0x03,
-    JXL = 0x04,
-    BMP = 0x05,
-    GIF = 0x07,
-    TIFF = 0x08,
-    JPG = 0x09
-};
+// SPEC - v3 UPDATE
 
-BBFMediaType detectTypeFromExtension(const std::string &extension);
-std::string MediaTypeToStr(uint8_t type);
+// WASM Binary Handling
+#ifdef __EMSCRIPTEN__
+    #include <emscripten.h>
+    #define LIBBBF_API EMSCRIPTEN_KEEPALIVE
+#elif defined(_WIN32)
+    #ifdef LIBBBF_EXPORT_SYMBOLS
+        #define LIBBBF_API __declspec(dllexport)
+    #else
+        #define LIBBBF_API __declspec(dllimport)
+    #endif
+#else
+    #define LIBBBF_API __attribute__((visibility("default")))
+#endif
+
 
 #pragma pack(push, 1)
 
 struct BBFHeader
 {
-    uint8_t magic[4]; // 0x42424631 (BBF1)
-    uint8_t version; // Major version, 1
-    uint32_t flags; // Reserved for now
-    uint16_t headerLen; // Size of header
-    uint64_t reserved; // set to 0
+    uint8_t magic[4]; // BBF
+    uint16_t version;
+    uint16_t headerLen;
+    uint32_t flags;
+    uint8_t alignment; // Pow 2. 12 = 4096
+    uint8_t reamSize; // Pow 2. Put smaller groups of pages into a "ream".
+    // Larger files get full alignment, small files get put in reams.
+    uint16_t reservedExtra; // align
+    uint64_t footerOffset;
+
+    uint8_t reserved[40];
 };
 
-// Create the libbbf structs
-struct BBFAssetEntry
-{
-    uint64_t offset; // Offset of the page
-    uint64_t length; // length of the file
-    uint64_t decodedLength;
-    uint64_t xxh3Hash; // Hash of image
-
-    uint8_t type; // 0x01 - AVIF, 0x02 PNG, 0x03 JPG ... etc.
-    uint8_t flags; // i.e. encryped or compressed
-
-    uint8_t padding[6]; // 64 BYTE struct
-    uint64_t reserved[3]; // Reserved. Future proofing.
-};
-
-// Create reading order
-struct BBFPageEntry
-{
-    uint32_t assetIndex; // Index into Asset Entry
-    uint32_t flags; // Unused as of now.  
-};
-
-// Create custom section struct
-struct BBFSection
-{
-    uint32_t sectionTitleOffset; // Offset into string pool
-    uint32_t sectionStartIndex; // Index of BBF Page index (the starting page of this section)
-    uint32_t parentSectionIndex; // I.E. volume -> Chapter
-};
-
-// Create the metadata
-struct BBFMetadata
-{
-    uint32_t keyOffset; //offset into String pool
-    uint32_t valOffset; // offset into String pool
-};
-
-// BBF Extension table (Generic, not used)
-struct BBFExpansionHeader
-{
-    uint32_t extensionType;
-    uint32_t padding;
-    uint64_t offset;
-    uint64_t flags;
-    uint64_t length;
-};
-
-// Create the footer
 struct BBFFooter
 {
+    uint64_t assetOffset;
+    uint64_t pageOffset;
+    uint64_t sectionOffset;
+    uint64_t metaOffset;
+    uint64_t expansionOffset;
+
     uint64_t stringPoolOffset;
-    uint64_t assetTableOffset;
-    uint32_t assetCount;
+    uint64_t stringPoolSize; // Size of string pool
 
-    uint64_t pageTableOffset;
-    uint32_t pageCount;
+    uint64_t assetCount;
+    uint64_t pageCount;
+    uint64_t sectionCount;
+    uint64_t metaCount; // key count
+    uint64_t expansionCount; // Expansion entry count
 
-    uint64_t sectionTableOffset;
-    uint32_t sectionCount;
+    uint32_t flags;
+    uint8_t footerLen; // size of this struct
+    uint8_t padding[3];
 
-    uint64_t metaTableOffset;
-    uint32_t keyCount;
+    uint64_t footerHash; // XXH3-64 hash of the index region
 
-    uint64_t extraOffset; // Point to an extra table in the future if we need.
+    uint8_t reserved[144];
+};
 
-    uint64_t indexHash; // Integrity check, hash of everything between index start and the current position.
-    uint8_t magic[4]; // 0x42424631 (BBF1) (Verification)
+struct BBFAsset
+{
+    uint64_t fileOffset;
+    uint64_t assetHash[2]; // XXH3-128
+    uint64_t fileSize; // size of file in bytes
+    uint32_t flags;
+    uint16_t reservedValue; // reserved, alignment
+    uint8_t type;
+    uint8_t reserved[9];
+};
+
+struct BBFPage
+{
+    uint64_t assetIndex;
+    uint32_t flags;
+    uint8_t reserved[4];
+};
+
+struct BBFSection
+{
+    uint64_t sectionTitleOffset; // offset into string pool
+    uint64_t sectionStartIndex; // page index of starting page
+    uint64_t sectionParentOffset; // offset into string pool
+    uint8_t reserved[8];
+};
+
+struct BBFMeta
+{
+    uint64_t keyOffset; // offset into string pool
+    uint64_t valueOffset; // offset into string pool
+    uint64_t parentOffset; // offset into string pool
+    uint8_t reserved[8];
+};
+
+struct BBFExpansion
+{
+    uint64_t expReserved[10];
+    uint32_t flags;
+    uint8_t reserved[44];
 };
 
 #pragma pack(pop)
 
-class BBFBuilder
+// Create namespace for default constants
+namespace BBF
 {
-    public:
-        BBFBuilder(const std::string &outputFilename);
-        ~BBFBuilder();
+    // Header Flags
+    constexpr static uint32_t BBF_PETRIFICATION_FLAG = 0x00000001u; // Petrified Flag. Footer immediately follows header.
+    constexpr static uint32_t BBF_VARIABLE_REAM_SIZE_FLAG = 0x00000002u; // Sub-Align Smaller Files (Variable Alignment)
 
-        bool addPage(const std::string& imagePath, uint8_t type, uint32_t flags = 0);
-        bool addSection(const std::string& title, uint32_t startPage, uint32_t parent = 0xFFFFFFFF);
-        bool addMetadata(const std::string& key, const std::string& value);
-
-        bool finalize();
+    // Muxer Constants
+    constexpr static uint32_t DEFAULT_GUARD_ALIGNMENT = 12; // pow2. Boundary size (Alignment) [4096]
+    constexpr static uint64_t DEFAULT_SMALL_REAM_THRESHOLD = 16; // Pow 2. Small ream threshold (Group of pages) for Variable Alignment. [65536]
     
-    private:
-        std::ofstream fileStream;
-        uint64_t currentOffset;
+    // Reader constants
+    constexpr static uint64_t MAX_BALE_SIZE = 16000000; // Maximum number of bytes the index region must be before we get suspicious.
+    //constexpr static uint8_t MAX_METADATA_DEPTH = 256; // So we don't go crazy while checking metadata entries
+    constexpr static uint64_t MAX_FORME_SIZE = 2048; // Maximum string length in the string pool
+    
 
-        std::vector<BBFAssetEntry> assets;
-        std::vector<BBFPageEntry> pages;
-        std::vector<BBFSection> sections;
-        std::vector<BBFMetadata> metadata;
-        std::vector<char> stringPool;
+    enum class BBFMediaType: uint8_t
+    {
+        UNKNOWN = 0x00,
+        AVIF = 0x01,
+        PNG = 0x02,
+        WEBP = 0x03,
+        JXL = 0x04,
+        BMP = 0x05,
+        GIF = 0x07,
+        TIFF = 0x08,
+        JPG = 0x09
+    };
 
-        // deduplication map
-        std::unordered_map<uint64_t, uint32_t> dedupeMap; // hash -> Idx
-        std::unordered_map<std::string, uint32_t> stringMap; // str -> offset
-
-        // helpers
-        uint32_t getOrAddStr(const std::string& str);
-        bool alignPadding();
-        uint64_t calculateXXH3Hash(const std::vector<char>& buffer);
-};
+    // BBF Version
+    constexpr static uint16_t VERSION = 3;
+}
 
 #endif // LIBBBF_H
