@@ -1,0 +1,390 @@
+File: SPECNOTE.TXT
+Title: BBF File Specification
+Version: 3.0
+Revised: 1/27/26
+Author: EF1500
+
+1.0 Introduction
+----------------
+
+    Bound Book Format is a binary container format designed for the
+    storage, deduplication, and paginated access of media assets.
+
+    Bound Book Format (BBF) files support arbitrary metadata, 
+    hierarchical sectioning and linearization (referred to as petrification).
+
+
+2.0 Notations
+-------------
+Usage of the term "MUST" or "SHALL" indicate required elements.
+
+"MUST NOT" or "SHALL NOT" indicate elements prohibited from use.
+
+"SHOULD" indicates a RECCOMENDED element.
+
+"SHOULD NOT" indicates and element NOT RECCOMENDED element.
+
+"MAY" indicates an OPTIONAL element.
+
+3.0 BBF Files
+-------------
+
+3.1 All multi-byte integer values MUST be stored in Little-Endian format unless otherwise specified.
+
+3.2 Alignment and Reaming
+    BBF files utilize a power-of-two alignment system. The alignment is stored
+    as an exponent (n), where the boundary is 2^n bytes.
+
+    Any implemented writer MUST prohibit the value of n from exceeding 16, or prompt
+    the user for confirmation.
+
+    Any implemented reader MUST inform the user if the value of n exceeds 16.
+
+    If the VARIABLE REAM SIZE flag is set, assets smaller than 2^(ream size) bytes
+    SHOULD be aligned to an 8-byte boundary to reduce internal fragmentation.
+
+3.3 Layout (Default)
+    The default BBF file layout is constructed in the following manner:
+
+    [BBF Header]
+    [Asset Data (Aligned)]
+    [Asset Table]
+    [Page Table]
+    [Section Table]
+    [Metadata Table]
+    [Expansion Table] (Optional)
+    [String Pool]
+    [BBF Footer]
+
+3.4 Layout (Petrified)
+    Petrified BBF files move the data tables and footer to immedieately
+    follow the header. Readers SHOULD parse the entire file structure
+    with one initial block read, provided the index region is less than
+    sixteen megabytes in size. For larger index sizes, readers SHOULD
+    verify the footer hash via streaming before allocating memory.
+
+    [BBF Header]
+    [Asset Table]
+    [Page Table]
+    [Section Table]
+    [Metadata Table]
+    [Expansion Table] (Optional)
+    [String Table]
+    [BBF Footer]
+    [Asset Data (Aligned)]
+
+4.0 BBF Data Structures
+-----------------------
+
+    Unless otherwise specified
+    - All integer fields are unsigned
+    - All reserved fields MUST be written as zero.
+    - All offsets are absolute file offsets, starting from the beginning of the file. 
+
+4.1 BBF Header
+    The header MUST appear at offset 0 and MUST be 64 bytes in BBF v3. 
+    Readers MAY use header length to validate header size.
+
+    Offset  Size       Description
+    0       4 bytes    Magic Number (0x42424633, "BBF3")
+    4       2 bytes    Format Major Version
+    6       2 bytes    Header Length (Total size of this header)
+    8       4 bytes    Header flags (see 4.1.1)
+    12      1 byte     Alignment exponent, 2^(alignment) bytes
+    13      1 byte     Ream threshold exponent, 2^(ream threshold) bytes
+    14      2 bytes    Reserved. MUST be zero.
+    16      8 bytes    BBF Footer offset.
+    24      40 bytes   Reserved. MUST be zero.
+
+    Any implemented reader MUST:
+    - Validate Magic
+    - Validate Version == 3
+    - Use footerOffset to locate the footer.
+
+4.1.1 Header Flags
+    
+    headerFlags is a 32-bit field with the following flag values
+
+    Bit / Mask  Name
+    0x00000001  PETRIFICATION_FLAG
+                If set, the file uses a Petrified layout (see 3.4)
+    0x00000002  VARIABLE_REAM_SIZE_FLAG
+                If set, assets smaller than 2^(ream threshold) bytes SHOULD
+                be aligned to an 8-byte boundary. Assets equal or larger MUST
+                be aligned to 2^(alignment) bytes.
+
+    All other bits are reserved and MUST be written as zero.
+
+4.2 BBF Footer
+
+    The footer must appear at the offset specified by footerOffset in
+    the header (see 4.1).
+
+    The footer provides necessary offsets and counts necessary to locate and
+    parse the index region.
+
+    Offset  Size       Description
+    0       8 bytes    Offset into the asset table
+    8       8 bytes    Offset into the page table
+    16      8 bytes    Offset into the section table
+    24      8 bytes    Offset into the metadata table
+    32      8 bytes    Offset into the expansion table, or 0
+    40      8 bytes    Offset into string pool region
+    48      8 bytes    Total size of the string pool region in bytes
+
+    56      8 bytes    Number of asset entries in the asset table
+    64      8 bytes    Number of page entries in the page table
+    72      8 bytes    Number of section entries in the section table
+    80      8 bytes    Number of metadata entries in the metadata table
+    88      8 bytes    Number of entries in the expansion table
+
+    96      4 bytes    Footer Flags (reserved; MUST be 0)
+    100     1 byte     Footer Length (total length of this structure)
+    101     3 bytes    Padding (MUST be 0)
+    104     8 bytes    XXH3-64 Hash of the Index Region (see 4.2.1)
+    112     144 bytes  Reserved. MUST be set to 0.
+
+    Any implemented reader MUST perform the following:
+    - Utilize the provided offsets to locate each table
+    - Igore expansion offset if it is 0.
+
+    Any implemented writer MUST perform the following:
+    - set footer length equal to the size of the footer structure, for
+    BBFv3, the footer is 256 bytes.
+
+    Any implemented reader SHOULD inform the user if the footer suggests
+    more than one million assets are present.
+
+4.2.1 Index Hash (footer hash)
+
+    BBF's footer hash is XXH3-64 computed over the serialized bytes of the
+    index region, excluding the asset data region.
+
+    The Index region consists of the Asset Table, Page Table, Section Table,
+    Metadata Table, and String Pool. It does NOT include the footer itself.
+
+    Should a writer include expansion entries, a writer MUST include this
+    region as well.
+
+    Readers MAY validate the footer hash. If validation fails, readers SHOULD
+    notify the user of a corrupted footer or close the file at once.
+
+    NOTE: XXH3-64 is not a cryptographic hash. Writers intending to implement
+    functionality for cryptographic hashes MAY use the provided expansion
+    table.
+
+4.3 Asset Table (BBFAsset)
+
+    Each stored asset entry describes a unique payload. Assets are deduplicated
+    using by using XXH3-128 hashes. Multiple pages MAY reference the same asset
+    index.
+
+    Offset  Size       Description
+    0       8 bytes    Offset to the file data (absolute file offset)
+    8       16 bytes   XXH3-128 Hash (stored as Little-Endian 128-bit integer)
+    24      8 bytes    Size of the file in bytes
+    32      4 bytes    Asset flags (Reserved, writers MUST set to 0)
+    36      2 bytes    Reserved Value (Padding). MUST be zero.
+    38      1 byte     Asset type (See 4.3.1)
+    39      9 bytes    Reserved (Padding). MUST be zero.
+
+    Any implemented reader MUST:
+    - Seek to the offset given in the table to retrieve the file data.
+    - Read the 128-bit hash as two 64-bit Little-Endian integers if
+    native 128-bit types are unavailable.
+    - Ensure all reserved and padding bytes are zero.
+
+    Any implemented writer MUST:
+    - Set reserved bytes to 0
+    - (Optional) Verify byte payloads if hashes match to guarantee zero collisions.
+
+    Any implemented writer MAY use the expansion table (See section 4.7) to add
+    cryptographic hashes or additional security features.
+
+    Asset hashes are chiefly for deduplication and local verification purposes. 
+    Asset hashes MUST NOT be used for secure integrity checks, or be treated as
+    cryptographically secure. Those self-hosting with exposed endpoints SHOULD NOT
+    use XXH3-128 hashes for local verification purposes. Individuals self-hosting
+    with no exposed endpoints MAY use the built-in XXH3-128 asset hashes for local
+    verification purposes.
+
+4.3.1 Asset Type (BBFMediaType)
+    
+    Media type is an 8 bit identifier.
+
+    Current defined values are as follows, with identifiers given in
+    hexadecimal.
+
+    Identifier  Media Type
+    0x00        UNKNOWN
+    0x01        AVIF
+    0x02        PNG
+    0x03        WEBP
+    0x04        JXL (JPEG-XL)
+    0x05        BMP
+    0x06        (Reserved)
+    0x07        GIF
+    0x08        TIFF
+    0x09        JPG
+    
+    Values 0x10 through 0xFF are reserved for user defined values. Any implemented
+    reader MAY support this feature or treat unknown types as UNKNOWN.
+    
+    Any implemented writer SHOULD allow for user-defined values, or treat unknown types
+    as UNKNOWN.
+
+4.4 Page Table (BBFPage)
+
+    The page table serves as the table of contents for readers, and provides
+    the logical reading order of a BBF file. Each entry references an asset by
+    index into the Asset Table.
+
+    Offset  Size       Description
+    0       8 bytes    Asset Index
+    8       4 bytes    Flags (reserved, writers MUST set to 0)
+    12      4 bytes    Reserved, writers MUST set to zero
+
+4.5 Section Table (BBFSection)
+
+    The section table defines logical groupings of pages. Sections MAY be
+    nested.
+
+    Offset  Size       Description
+    0       8 bytes    Offset into string pool for section title
+    8       8 bytes    First page index in this section
+    16      8 bytes    Offset into string pool of parent,
+                       or (0xFFFFFFFFFFFFFFFF for none)
+    24      8 bytes    Reserved. MUST be set to 0.
+
+4.6 Metadata Table (BBFMeta)
+
+    Metadata entries define arbitrary key-value pairs associated with
+    the BBF file. Metadata MAY optionally be associated with a parent
+    identifier.
+
+    Offset  Size       Description
+    0       8 bytes    Offset into string pool for metadata key
+    8       8 bytes    Offset into string pool for metadata value
+    16      8 bytes    Offset into string pool for parent identifier,
+                       or 0xFFFFFFFFFFFFFFFF if none
+    24      8 bytes    Reserved. MUST be set to zero
+
+    Any implemented reader SHOULD:
+    - Interpret keys and values as UTF-8 encoded strings
+    - Treat parent offset value 0xFFFFFFFFFFFFFFFF as "no parent"
+
+    Any implemented writer MUST:
+    - Set all reserved bytes to zero
+
+4.7 Expansion Table (Optional)
+
+    The Expansion Table is reserved for future extensions to the BBF
+    format. In BBF v3, this region is OPTIONAL and not yet standardized.
+
+    If no expansion data is present, the expansion offset in the footer
+    MUST be set to 0, and its table size is 0.
+
+    Readers MUST ignore the expansion table if the expansion offset is 0.
+    Readers SHOULD ignore unknown expansion formats.
+
+4.8 String Pool
+
+    The string pool is a contiguous region of UTF-8 encoded strings.
+    All string references within BBF structures are offsets into this
+    pool.
+
+    Offsets into the string pool are absolute file offsets.
+
+    Writers MUST store strings as null-terminated UTF-8 sequences.
+    Readers MUST enforce a maximum string length of 2048 characters in
+    the string pool.
+
+    Strings in the string pool are for metadata and sectioning purposes
+    only. Expansion entries which include text data MUST NOT include
+    offsets to this region.
+
+    All string offsets MUST be located in the region defined by
+    (string pool offset + string pool size).
+
+    Any implemented reader MUST:
+    - Validate that string offsets fall within the string pool region
+    - Treat invalid offsets as file corruption
+    - Ensure null terminators exist within the bounds of the
+    string pool (string pool offset + string pool size).
+    - Ensure null terminators exist within the max string length of the
+    current string pool offset.
+    - Ensure (string pool offset + string pool size) does not
+    result in an integer overflow.
+
+5.0 Asset Data Region
+---------------------
+
+    The Asset Data Region contains the raw byte payloads of stored assets.
+
+    Each asset's data location and size is defined by the Asset Table.
+    Assets MAY be stored in any order, but SHOULD be stored contiguously
+    to reduce fragmentation.
+
+    In non-petrified files, asset data MUST appear immediately after the
+    header.
+
+    In petrified files, asset data MUST appear after the footer.
+
+    Asset data SHOULD be aligned according to the alignment rules
+    described in Section 3.2.
+
+6.0 Petrification
+---------------------------
+
+    Petrification is the process of reorganizing a BBF file such that
+    all index structures appear contiguously at the front of the file.
+
+    Petrified BBF files are optimized for:
+    - Single-read parsing
+    - Streaming and prefetching
+
+    When petrified:
+    - All table offsets in the footer MUST reflect their new locations
+    - Asset offsets MUST be updated to account for the relocated data
+      region
+    - The PETRIFICATION_FLAG MUST be set in the header
+
+    Readers MUST support both petrified and non-petrified layouts.
+
+    Any implemented reader MUST:
+    - Verify offsets do not exceed the file's bounds.
+    - Support both petrified and non-petrified layouts.
+
+    Any implemented reader SHOULD:
+    - Verify the footer hash before allocating resources
+
+7.0 Conformance Requirements
+----------------------------
+
+7.1 Writer Conformance
+
+    A conforming BBF v3 writer MUST:
+    - Write a valid BBF header at offset 0
+    - Populate all required tables
+    - Write a valid footer and set footer offset correctly
+    - Set all reserved fields to zero
+    - Use little-endian encoding for all multi-byte values
+    - Correctly compute the footer hash
+
+7.2 Reader Conformance
+
+    A conforming BBF v3 reader MUST:
+    - Validate the magic number and version
+    - Locate and parse the footer using footer offset
+    - Use footer-provided offsets and counts to parse tables
+    - Support both petrified and non-petrified files
+    - Verify that (Table Entry Count * Entry Size) <= Filesize
+    before allocating memory for any table.
+    - Verify that (Table Entry Count * Entry Size + Table offset)
+    does not overflow before allocating memory.
+    - Verify that Asset Offset + Asset Size <= Filesize before
+    reading asset data.
+
+    A conforming BBF v3 reader SHOULD:
+    - Reject or inform users if files contain nonzero data in
+    reserved or padding fields. 
