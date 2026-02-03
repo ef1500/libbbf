@@ -773,7 +773,7 @@ BBFReader::BBFReader(const char* iFile)
     #ifdef _WIN32
         this->hFile = CreateFileA(iFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-        if (this-hFile == INVALID_HANDLE_VALUE)
+        if (this->hFile == INVALID_HANDLE_VALUE)
         {
             fprintf(stderr, "[BBFMUX] Unable to open file %s\n", iFile);
             return;
