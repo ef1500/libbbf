@@ -5,16 +5,29 @@
 
 > [!WARNING]
 > **Official Source Notice: Please only download releases from this repository (ef1500/libbbf). External mirrors or forks may contain malware.**
+---
+Bound Book Format (.bbf) is a binary container format intended for the ordered storage of page-based media assets. BBF was designed principally for comics, manga, artbooks, and similar sequential image collections. 
 
-Bound Book Format (.bbf) is a high-performance binary container designed specifically for digital comic books and manga. Unlike CBR/CBZ, BBF is built for DirectStorage/mmap, easy integrity checks, and mixed-codec containerization.
+Bound Book Format additionally enables paginated retrival, asset deduplication, fast indexed access to page order and metadata, and MKV-like sectioning.
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+### Prerequisites (Muxer, Library, General Use)
 - C++17 compliant compiler (GCC/Clang/MSVC), and optionally CMake
 - [xxHash](https://github.com/Cyan4973/xxHash) library
+
+### Prerequisites (Debugging/Benchmarking)
+- [xxHash](https://github.com/Cyan4973/xxHash) library
+- [Catch2](https://github.com/catchorg/Catch2)
+- [Miniz](https://github.com/richgel999/miniz)
+- CMake
+
+### Prerequisites (WASM)
+- [xxHash](https://github.com/Cyan4973/xxHash) library
+- [Emscripten](https://emscripten.org/)
+- CMake
 
 ### Compilation
 
@@ -26,16 +39,16 @@ cmake --build build
 sudo cmake --install build
 ```
 
-#### Manual
+#### Manual Compilation
 
 Linux
 ```bash
-g++ -std=c++17 bbfenc.cpp libbbf.cpp xxhash.c -o bbfmux -pthread
+g++ -std=c++17 -O2 -I./src -I./src/muxer -I./src/vend src/muxer/bbfmux.cpp src/bbfcodec.cpp src/muxer/dedupemap.cpp src/muxer/stringpool.cpp src/vend/xxhash.c -o bbfmux
 ```
 
 Windows
 ```bash
-g++ -std=c++17 bbfenc.cpp libbbf.cpp xxhash.c -o bbfmux -municode
+g++ -std=c++17 -O2 -I./src -I./src/muxer -I./src/vend src/muxer/bbfmux.cpp src/bbfcodec.cpp src/muxer/dedupemap.cpp src/muxer/stringpool.cpp src/vend/xxhash.c -o bbfmux
 ```
 
 Alternatively, if you need python support, use [libbbf-python](https://github.com/ef1500/libbbf-python). 
@@ -44,76 +57,98 @@ Alternatively, if you need python support, use [libbbf-python](https://github.co
 
 ## Technical Details
 
-BBF is designed as a Footer-indexed binary format. This allows for rapid append-only creation and immediate random access to any page without scanning the entire file.
+BBF files are footer-indexed, and the footer can be at either after the header (`petrified`) for fast reading, or at the bottom (`default`).
 
-### MMAP Compatibility
-The `bbfmux` reference implementation utilizes **Memory Mapping (mmap/MapViewOfFile)**. Instead of reading file data into intermediate buffers, the tool maps the container directly into the process address space. This allows the CPU to access image data at the speed of your NVMe drive's hardware limit.
+### Feature Comparison: BBF v3 (libbbf) and Common Comic Storage Containers
 
-### High-Speed Parallel Verification
-Integrity checks utilize **Parallel XXH3**. On multi-core systems, the verifier splits the asset table into chunks and validates multiple pages simultaneously. This makes BBF verification up to **10x faster** than ZIP/RAR CRC checks.
+> Legend: ✅ = specified in-format; ⚠️ = optional / conventional; ❌ = not in spec
 
-### 4KB Alignment
-Every asset in a BBF file starts on a **4096-byte boundary**. This alignment is critical for modern hardware, allowing for DirectStorage transfers directly from disk to GPU memory, bypassing CPU bottlenecks entirely.
-
-Note: DirectStorage isn't avaliable for images yet (as far as I know), but I've made sure to accomodate such a thing in the future with this format.
-
-### Binary Layout
-1. **Header (13 bytes)**: Magic `BBF1`, versioning, and initial padding.
-2. **Page Data**: The raw image payloads (AVIF, PNG, etc.), each padded to **4096-byte boundaries**.
-4. **String Pool**: A deduplicated pool of null-terminated strings for metadata and section titles.
-5. **Asset Table**: A registry of physical data blobs with XXH3 hashes.
-6. **Page Table**: The logical reading order, mapping logical pages to assets.
-7. **Section Table**: Markers for chapters, volumes, or gallery sections.
-8. **Metadata Table**: Key-Value pairs for archival data (Author, Scanlation team, etc.).
-9. **Footer (76 bytes)**: Table offsets and a final integrity hash.
-
-NOTE: `libbbf.h` includes a `flags` field, as well as extra padding for each asset entry. This is so that in the future `libbbf` can accomodate future technical advancements in both readers and image storage. I.E. If images support DirectStorage in the future, then BBF will be able to use it.
-
-### Feature Comparison: Digital Comic & Archival Formats
-
-| Feature | **BBF** | CBZ (Zip) | CBR (Rar) | PDF | EPUB | Folder |
+| Capability | **BBF v3 (libbbf)** | CBZ (ZIP) | CBR (RAR) | PDF | EPUB | Folder |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Random Page Access** | ✅ | ✅[8] | ✅[8] | ✅ | ❌ | ✅ |
-| **Native Data Deduplication** | ✅ | ❌ | ❌ | ⚠️ [1] | ❌ | ❌ |
-| **Per-Asset Integrity (XXH3)** | ✅ | ⚠️[9] | ⚠️[9] | ❌ | ❌ | ❌ |
-| **4KB Sector Alignment** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Native Sections/Chapters** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
-| **Arbitrary Metadata (UTF-8)** | ✅ | ⚠️ [2] | ❌ | ✅ | ✅ | ❌ |
-| **Mixed-Codec Support** | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| **DirectStorage/mmap Ready** | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ [3] |
-| **Low Parser Complexity** | ✅ | ⚠️ [4] | ❌ | ❌ | ❌ | ✅ |
-| **Bit-Rot Detection** | ✅ | ⚠️ [5] | ⚠️ [5] | ❌ | ❌ | ❌ |
-| **Streaming-Friendly Index** | ⚠️ [6] | ⚠️ [6] | ❌ | ✅ [7] | ⚠️ | ❌ |
-| **Wide Software Support** | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Memory-mapped parsing** | ✅ | ✅ [A] | ✅ [B] | ⚠️ [C] |  ✅ [A][D] | ✅ |
+| **Adjustable alignment** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Variable alignment (size-based packing)** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Content-hash deduplication** | ✅ | ❌ | ❌ | ⚠️ [E] | ⚠️ [F] | ⚠️ [G] |
+| **Per-asset integrity value stored with each asset** | ✅ (XXH3-128) | ⚠️ (CRC32) [H] | ✅ (CRC32/BLAKE2sp) [I] | ❌ | ⚠️ (CRC32) [H] | ❌ |
+| **Single index-region checksum** | ✅ (XXH3-64) | ❌ [J] | ✅ [K] | ❌ | ❌ | ❌ |
+| **Index-first layout / linearization** | ✅ (Petrification) | ❌ [L] | ⚠️ [M] | ✅ [N] | ❌ [L] | ❌ |
+| **Arbitrary metadata** | ✅ | ⚠️ [O] | ⚠️ [P] | ✅ [Q] | ✅ [R] | ⚠️ [S] |
+| **Hierarchical sectioning / chapters** | ✅ | ❌ | ❌ | ✅ [T] | ✅ [U] | ⚠️ [V] |
+| **Customizable page ordering independent of filenames** | ✅ | ❌ | ❌ | ✅ [W] | ✅ [U] | ❌ |
+| **Customizable expansion entries** | ✅ (expansion table) | ✅ [X] | ✅ [Y] | ✅ [Z] | ✅ [AA] | ❌ |
 
-<font size="2">
-[1] - PDF supports XObjects to reuse resources, but lacks native content-hash deduplication; identical images must be manually referenced.<br/>
-[2] - CBZ does not support metadata natively in the ZIP spec; it relies on unofficial sidecar files like <code>ComicInfo.xml</code>.<br/>
-[3] - While folders allow memory mapping, individual images within them are rarely sector-aligned for optimized DirectStorage throughput.<br/>
-[4] - ZIP/RAR require large, complex libraries (zlib/libarchive); BBF is a "Plain Old Data" (POD) format requiring only a few lines of C++ to parse.<br/>
-[5] - ZIP/RAR use CRC32, which is aging, collision-prone, and significantly slower to verify than XXH3 for large archival collections. See [8].<br/>
-[6] - Because the index is at the end (Footer), web-based streaming requires a "Range Request" to the end of the file before reading pages.<br/>
-[7] - PDF supports "Linearization" (Fast Web View), allowing the header and first pages to be read before the rest of the file is downloaded.<br/>
-[8] - As Reddit properly corrected me, ZIP/RAR does have random access. <br/>
-[9] - While I think CRC32 is a legacy hash format, ZIP/RAR does have verification ability, though somewhat outdated. See [5].<br/>
+<sub>
+[A] Only in STORE mode, which CBZ is typically in.<br/>
+[B] Only in STORE mode, which CBR is typically in.<br/>
+[C] PDFs often store page content/images in filtered (compressed) streams; mmap helps parsing, not "direct page bytes".<br/>
+[D] EPUB is a ZIP-based container with additional rules; it inherits ZIP's container properties.<br/>
+[E] PDF can reuse already-stored objects/resources by reference, but there is no hash-based deduplication mechanism.<br/>
+[F] EPUB can reference the same resource from multiple content documents (file-level reuse), but does not have hash-based a deduplication mechanism.<br/>
+[G] Folder-level deduplication is a filesystem matter (hardlinks, block-dedupe, etc.).<br/>
+[H] ZIP/EPUB store CRC-32 per member.<br/>
+[I] RAR stores per-file checksums; RAR5 can use BLAKE2sp instead of CRC32.<br/>
+[J] ZIP has per-entry CRC32; an archive-wide checksum is not a baseline ZIP requirement (there are optional signing/encryption features).<br/>
+[K] RAR has header/file checksums.<br/>
+[L] ZIP's "end of central directory" structure is tail-located by design; the canonical index is at the end.<br/>
+[M] RAR5 may include an optional "quick open record" placed at the end to accelerate listing, but it is not index-first linearization.<br/>
+[N] PDF defines "Linearized PDF" (fast web view) as a standardized layout.<br/>
+[O] ZIP provides extra fields and stores application-defined manifest files.<br/>
+[P] RAR provides "extra area" records and archive comments; structured metadata is not standardized as key:value pairs.<br/>
+[Q] PDF includes a metadata model (e.g., XMP) and document structure/navigation mechanisms; it is rich, but correspondingly intricate.<br/>
+[R] EPUB's package document supports metadata and a defined reading order via the spine.<br/>
+[S] Folder metadata is may differ by operating system.<br/>
+[T] PDF may contain a document outline (bookmarks) as a navigational hierarchy.<br/>
+[U] EPUB defines a default reading order via the spine (and navigation documents for the table of contents).<br/>
+[V] A folder can simulate sectioning with subdirectories, but no interoperable "chapter table" exists.<br/>
+[W] PDF page order is defined by the page tree structure.<br/>
+[X] ZIP extra fields are a per-record entry and not table-based.<br/>
+[Y] RAR extra area records are entries with forward-compatible skipping rules.<br/>
+[Z] PDF defines formal extension rules (name classes, extension mechanisms).<br/>
+[AA] EPUB permits additional resources and metadata.
+</sub>
 
-</font>
 
 ### Graphical Comparison (BBF vs. CBZ)
-<img width="4372" height="2888" alt="performance_grid" src="https://github.com/user-attachments/assets/34f38fc6-eb25-4b0d-bc8c-cbda00be3d8a" />
+
+A graphical representation of `bbfbench` is given below. To verify (or to see BBF's performance metrics on your particular system), use the bbfbench program provided in `./src/bench/`.
+
+<img width="5400" height="1800" alt="bbf_vs_cbz_benchmark" src="https://github.com/user-attachments/assets/91c43861-6d39-4bdf-86d0-f4e0d3850170">
+
 
 ---
 
 ## Features
 
-### Content Deduplication
-BBF uses **[XXH3_64](https://github.com/Cyan4973/xxHash)** hashing to identify identical pages. If a book contains duplicate pages, the data is stored exactly once on disk while being referenced multiple times in the Page Table.
+### Memory Mapping
+Libbbf uses memory mapping to load files into memory and read them quickly.
 
-### Archival Integrity
-BBF stores a 64-bit hash for *every individual asset*. The `bbfmux --verify` command can pinpoint exactly which page has been damaged, rather than simply failing to open the entire archive.
+### Adjustable Alignment (Ream Size)
+You can adjust the alignment between assets.
 
-### Mixed-Codec Support
-Preserve covers in **Lossless PNG** while encoding internal story pages in **AVIF** to save 70% space. BBF explicitly flags the codec for every asset, allowing readers to initialize the correct decoder instantly without "guessing" the file type.
+### Deduplication
+Libbbf deduplicates assets using `XXH3-128`, and stores the asset hash for future
+verification purposes.
+
+### XXH3-64 Footer Checksum
+Libbbf uses an XXH3-64 hash to checksum the asset, page, and string tables.
+
+### Linearization (Petrification)
+For those self-hosting, BBF can relocate the index and footer to immediately follow the header. This allows readers to parse the entire file structure with a single initial block read.
+
+### Arbitrary Metadata
+Libbbf supports arbitrary key:value pairs with optional parent labels (key:value\[:parent\]).
+
+### MKV-Like Sectioning
+Support for nested chapters and groupings using parent-labeled sections, allowing for table-of-contents structures.
+
+### Customizable Page-Ordering
+Logical reading order is decoupled from physical asset storage by using a dedicated Page Table, so custom demuxing/page orders can be specified.
+
+### Customizable Expansion Entries
+Libbbf's spec includes expansion entries, which can be used to expand the functionality of bbf files.
+
+### Variable Alignment (Variable Ream Size)
+BBF files support power-of-two alignment (up to 2^16). To minimize internal fragmentation, a "Variable Ream" flag allows smaller assets to be packed to 8-byte boundaries while larger assets remain aligned to the primary ream size.
 
 ---
 
@@ -121,23 +156,91 @@ Preserve covers in **Lossless PNG** while encoding internal story pages in **AVI
 
 The included `bbfmux` tool is a reference implementation for creating and managing BBF files.
 
+```bash
+========[ BBFMUX v3.0 ]====================================================
+| Bound Book Format Muxer                             Developed by EF1500 |
+===========================================================================
+
+USAGE: bbfmux <INPUT_DIR|BBF_FILE> [MODE] [OPTIONS]...
+
+MODES (Mutually Exclusive):
+  (Default)    Mux folder contents into a BBF container
+  --info       Display headers, metadata, and statistics
+  --verify     Validate XXH3-128/64 hashes
+  --extract    Unpack contents to disk
+  --petrify    Linearize BBF file for faster reading
+
+MUXER OPTIONS:
+  --meta=K:V[:P]         Add metadata (Key:Value[:Parent])
+  --metafile=<FILE>      Read K:V:P entries from file
+  --section=N:T[:P]      Add section (Name:Target[:Parent])
+  --sections=<FILE>      Read section entries from file
+  --ream-size=<N>        Ream size exponent override (2^N)
+  --alignment=<N>        Byte alignment exponent override (2^N)
+  --variable-ream-size   Enable variable ream sizing (reccomended)
+
+VERIFY / EXTRACT OPTIONS:
+  --section="NAME"    Target specific section
+  --rangekey="KEY"    Stop extraction on key substring match
+  --asset=<ID>        Target specific asset ID
+  --outdir=[PATH]     Extract asset(s) to directory
+  --write-meta[=F]    Dump metadata to file [default: path.txt]
+  --write-hashes[=F]  Dump hashes to file [default: hashes.txt]
+
+INFO FLAGS:
+  --hashes, --footer, --sections, --counts, --header, --metadata, --offsets
+```
+
 ## CLI Features
 
-The `bbfmux` utility provides a powerful interface for managing Bound Book files:
+The `bbfmux` utility provides an example interface for managing Bound Book files:
 
-*   **Flexible Ingestion**: Create books by passing individual files, entire directories, or a mix of both.
-*   **Logical Structuring**: Add named **Sections** (Chapters, Volumes, Extras, Galleries) to define the internal hierarchy of the book.
-*   **Custom Metadata**: Embed arbitrary Key:Value pairs into the global string pool for archival indexing.
-*   **Content-Aware Extraction**: Extract the entire book or target specific sections by name.
+*   Create BBF Files by specifying a directory you wish to mux
+*   Add named sections (Chapters, Volumes, Extras, Galleries) to define the internal hierarchy of the book.
+*   Embed arbitrary Key:Value pairs into the global string pool for archival indexing.
+*   Extract the entire book or target specific sections by name using a `rangekey`.
 
 ## Usage Examples
 
 ### Create a new BBF
-You can mix individual images and folders. `bbfmux` sorts inputs alphabetically, deduplicates identical assets, and aligns data to 4096-byte boundaries. See [Advanced CLI Usage](https://github.com/ef1500/libbbf?tab=readme-ov-file#advanced-cli-features) for how to specify your own custom page orders.
+You can mix individual images and folders. `bbfmux` sorts inputs alphabetically, deduplicates identical assets, and aligns data to user-defined boundaries (2^N).
+
+```bash
+> ./bbfmux --help
+
+========[ BBFMUX v3.0 ]====================================================
+| Bound Book Format Muxer                             Developed by EF1500 |
+===========================================================================
+
+USAGE: bbfmux <INPUT_DIR|BBF_FILE> [MODE] [OPTIONS]...
+
+MODES (Mutually Exclusive):
+  (Default)    Mux folder contents into a BBF container
+  --info       Display headers, metadata, and statistics
+  --verify     Validate XXH3-128/64 hashes
+  --extract    Unpack contents to disk
+  --petrify    Linearize BBF file for faster reading
+
+MUXER OPTIONS:
+  --meta=K:V[:P]         Add metadata (Key:Value[:Parent])
+  --metafile=<FILE>      Read K:V:P entries from file
+  --section=N:T[:P]      Add section (Name:Target[:Parent])
+  --sections=<FILE>      Read section entries from file
+  --ream-size=<N>        Ream size exponent override (2^N)
+  --alignment=<N>        Byte alignment exponent override (2^N)
+  --variable-ream-size   Enable variable ream sizing (reccomended)
+
+VERIFY OPTIONS:
+  --section="NAME"    Target specific section
+  --asset=<ID>        Target specific asset ID
+
+INFO FLAGS:
+  --hashes, --footer, --sections, --counts, --header, --metadata, --offsets
+```
 
 ```bash
 # Basic creation with metadata
-bbfmux cover.png ./chapter1/ endcard.png \
+bbfmux ./chapter1/ \
   --meta=Title:"Akira" \
   --meta=Author:"Katsuhiro Otomo" \
   --meta=Tags:"[Action, Sci-Fi, Cyberpunk]" \
@@ -145,7 +248,7 @@ bbfmux cover.png ./chapter1/ endcard.png \
 ```
 
 ### Hierarchical Sections (Volumes & Chapters)
-BBF supports nesting sections. By defining a Parent relationship, you can group chapters into volumes. This allows readers to display a nested Table of Contents and enables bulk-extraction of entire volumes.
+BBF supports nesting sections. By defining a parent label, you can group chapters into volumes. This allows readers to display a nested Table of Contents and enables bulk-extraction of entire volumes.
 
 **Syntax:** `--section="Name":Page[:ParentName]`
 
@@ -161,13 +264,13 @@ bbfmux ./manga_folder/ \
 ```
 
 ### Verify Integrity
-Scan the archive for bit-rot or data corruption. BBF uses **[XXH3_64](https://github.com/Cyan4973/xxHash)** hashes to verify every individual image payload.
+Scan the archive for data corruption. BBF uses **[XXH3_128](https://github.com/Cyan4973/xxHash)** hashes to verify every individual image payload.
 ```bash
 bbfmux input.bbf --verify
 ```
 
 ### Extract Data
-Extract the entire book, a specific volume, or a single chapter. When extracting a parent section (like a Volume), `bbfmux` automatically includes all child chapters.
+Extract the entire book, a specific volume, or a single chapter by using the `--extract` option.
 
 **Extract a specific section:**
 ```bash
@@ -182,7 +285,7 @@ bbfmux input.bbf --extract --outdir="./unpacked_book"
 ### View Metadata & Structure
 View the version, page count, deduplication stats, hierarchical sections, and all embedded metadata.
 ```bash
-bbfmux input_book.bbf --info
+bbfmux input_book.bbf --info --header --footer --metadata --sections
 ```
 
 ---
@@ -190,23 +293,6 @@ bbfmux input_book.bbf --info
 ## Advanced CLI Features
 
 `bbfmux` also supports more advanced options, allowing full-control over your `.bbf` files.
-
-### Custom Page Ordering (`--order`)
-You can precisely control the reading order using a text file or inline arguments.
-*   **Positive Integers**: Fixed 1-based index (e.g., `cover.png:1`).
-*   **Negative Integers**: Fixed position from the end (e.g., `credits.png:-1` is always the last page).
-*   **Unspecified**: Sorted alphabetically between the fixed pages.
-
-```bash
-# Using an order file
-bbfmux ./images/ --order=pages.txt out.bbf
-
-# pages.txt example:
-cover.png:1
-page1.png:2
-page2.png:3
-credits.png:-1
-```
 
 ### Batch Section Import (`--sections`)
 Sections define Chapters or Volumes. You can target a page by its index or filename.
@@ -229,11 +315,11 @@ BBF allows for verification of data to detect bit-rot.
 # Verify everything (All assets and Directory structure)
 bbfmux input.bbf --verify
 
-# Verify only the directory hash (Instant)
-bbfmux input.bbf --verify -1
+# Verify first asset
+bbfmux input.bbf --verify --asset=1
 
-# Verify a specific asset by index
-bbfmux input.bbf --verify 42
+# Verify a specific section
+bbfmux input.bbf --verify --section="Volume 1"
 ```
 
 ### Range-Key Extraction
