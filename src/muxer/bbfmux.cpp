@@ -60,6 +60,7 @@ char* readTxtFile(const char* fPath)
     if(!file)
     {
         // can't open file
+        printf("[BBFMUX] Unable to read text file: %s", fPath);
         return 0;
     }
 
@@ -68,7 +69,14 @@ char* readTxtFile(const char* fPath)
     fseek(file, 0, SEEK_SET);
 
     char* cString = (char*)malloc(fileSize + 1);
-    fread(cString, 1, fileSize, file);
+    size_t readSize = fread(cString, 1, fileSize, file);
+
+    if (readSize != fileSize)
+    {
+        printf("[BBFMUX] Unable to read text file: %s", fPath);
+        return 0;
+    }
+
     fclose(file);
 
     cString[fileSize] = 0;
