@@ -36,7 +36,7 @@ BBFBuilder::BBFBuilder(const char* oFile, uint32_t alignment, uint32_t reamSize,
 
     if ( !this->file )
     {
-        fprintf(stderr, "[BBFMUX] Could not open file: %s\n", oFile);
+        fprintf(stderr, "[BBFCODEC] Could not open file: %s\n", oFile);
         exit(1);
     }
 
@@ -66,7 +66,7 @@ BBFBuilder::BBFBuilder(const char* oFile, uint32_t alignment, uint32_t reamSize,
 
     if (written != sizeof(BBFHeader))
     {
-        fprintf(stderr, "[BBFMUX] Failed to write blank header to %s\n",oFile);
+        fprintf(stderr, "[BBFCODEC] Failed to write blank header to %s\n",oFile);
         exit(1);
     }
 
@@ -115,7 +115,7 @@ void BBFBuilder::growAssets()
     // Memory error.
     if (!pAsset)
     {
-        fprintf(stderr, "[BBFMUX] Unable to allocate %zu bytes for assets.", newCap);
+        fprintf(stderr, "[BBFCODEC] Unable to allocate %zu bytes for assets.", newCap);
         exit(1);
     }
 
@@ -132,7 +132,7 @@ void BBFBuilder::growPages()
 
     if (!pPage)
     {
-        fprintf(stderr, "[BBFMUX] Unable to allocate %zu bytes for page sector.", newCap);
+        fprintf(stderr, "[BBFCODEC] Unable to allocate %zu bytes for page sector.", newCap);
         exit(1);
     }
 
@@ -148,7 +148,7 @@ void BBFBuilder::growSections()
 
     if (!pSection)
     {
-        fprintf(stderr, "[BBFMUX] Unable to allocate %zu bytes for section sector.", newCap);
+        fprintf(stderr, "[BBFCODEC] Unable to allocate %zu bytes for section sector.", newCap);
         exit(1);
     }
 
@@ -164,7 +164,7 @@ void BBFBuilder::growMeta()
 
     if (!pMeta)
     {
-        fprintf(stderr, "[BBFMUX] Unable to allocate %zu bytes for metadata sector.", newCap);
+        fprintf(stderr, "[BBFCODEC] Unable to allocate %zu bytes for metadata sector.", newCap);
         exit(1);
     }
 
@@ -262,7 +262,7 @@ bool BBFBuilder::addPage(const char* fPath, uint32_t pFlags, uint32_t aFlags)
 
     if (!iImg)
     {
-        fprintf(stderr, "[BBFMUX] Unable to open %s for reading.\n", fPath);
+        fprintf(stderr, "[BBFCODEC] Unable to open %s for reading.\n", fPath);
         return false;
     }
 
@@ -403,7 +403,7 @@ bool BBFBuilder::addSection(const char* sectionName, uint64_t startIndex, const 
 
     if (startIndex > this->pageCount)
     {
-        printf("[BBFMUX] Cannot add section %s: Index out of bounds.", sectionName);
+        printf("[BBFCODEC] Cannot add section %s: Index out of bounds.", sectionName);
         return false;
     }
 
@@ -449,7 +449,7 @@ bool BBFBuilder::finalize()
 
     if (this->assetCount == 0)
     {
-        printf("[BBFMUX] No assets to finalize.");
+        printf("[BBFCODEC] No assets to finalize.");
         return false;
     }
 
@@ -598,7 +598,7 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
 
     if (!sourceBBF)
     {
-        fprintf(stderr, "[BBFMUX] Cannot petrify an already open file.\n");
+        fprintf(stderr, "[BBFCODEC] Cannot petrify an already open file.\n");
         return false;
     }
 
@@ -609,21 +609,21 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
     if (headerSize != sizeof(BBFHeader))
     {
         fclose(sourceBBF);
-        fprintf(stderr, "[BBFMUX] Invalid Header.\n");
+        fprintf(stderr, "[BBFCODEC] Invalid Header.\n");
         return false;
     }
 
     //Check Magic
     if (header.magic[0] != 'B' || header.magic[1] != 'B' || header.magic[2] != 'F' || header.magic[3] != '3')
     {
-        fprintf(stderr, "[BBFMUX] Invalid Magic Detected. Closing File.\n");
+        fprintf(stderr, "[BBFCODEC] Invalid Magic Detected. Closing File.\n");
         fclose(sourceBBF);
         return false;
     }
 
     if (header.flags & BBF::BBF_PETRIFICATION_FLAG)
     {
-        fprintf(stderr, "[BBFMUX] File Already Petrified. Closing File.\n");
+        fprintf(stderr, "[BBFCODEC] File Already Petrified. Closing File.\n");
         fclose(sourceBBF);
         return false;
     }
@@ -637,13 +637,14 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
     {
         // invalid footer
         fclose(sourceBBF);
-        fprintf(stderr, "[BBFMUX] Invalid Footer.\n");
+        fprintf(stderr, "[BBFCODEC] Invalid Footer.\n");
         return false;
     }
 
     // get first offset.
     uint64_t indexStart = footer.assetOffset;
-    uint64_t newIndexStart = sizeof(BBFHeader);
+    // size of both header + footer combined
+    uint64_t newIndexStart = sizeof(BBFHeader) + sizeof(BBFFooter);
 
     fseek(sourceBBF, 0, SEEK_END);
     long endPos = ftell(sourceBBF);
@@ -651,28 +652,50 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
     if (endPos < 0)
     {
         fclose(sourceBBF);
-        fprintf(stderr, "[BBFMUX] ftell failed. Got: %ld\n", endPos);
+        fprintf(stderr, "[BBFCODEC] ftell failed. Got: %ld\n", endPos);
         return false;
     }
 
     uint64_t fileSize = (uint64_t)endPos;
 
-    uint64_t indexSize = fileSize - indexStart;
+    uint64_t indexSize = header.footerOffset - indexStart; // don't copy footer
     uint64_t dataSize = indexStart - header.headerLen;
 
     FILE* tmpBBF = fopen(tmpPath, "wb+");
     if (!tmpBBF)
     {
         fclose(sourceBBF);
-        fprintf(stderr, "[BBFMUX] Failed to open petrified.bbf.tmp\n");
+        fprintf(stderr, "[BBFCODEC] Failed to open petrified.bbf.tmp\n");
         return false;
     }
 
     BBFHeader newHeader = header;
+    BBFFooter newFooter = footer; // make new footer
     newHeader.flags |= BBF::BBF_PETRIFICATION_FLAG;
 
-    newHeader.footerOffset = sizeof(BBFHeader) + indexSize - sizeof(BBFFooter);
+    newHeader.footerOffset = sizeof(BBFHeader); // + indexSize - sizeof(BBFFooter);
+    // Write header
     fwrite(&newHeader, 1, sizeof(BBFHeader), tmpBBF);
+
+    // Read footer, calculate shifts
+    int64_t shiftIndex = (int64_t)newIndexStart - (int64_t)indexStart;
+
+    uint64_t newDataStart = newIndexStart + indexSize;
+    int64_t shiftData = (int64_t)newDataStart - (int64_t)header.headerLen;
+
+    fseek(tmpBBF, (long)newHeader.footerOffset, SEEK_SET);
+
+    // Shift offsets
+    // TODO: Alignment, maybe?
+    newFooter.assetOffset += shiftIndex;
+    newFooter.pageOffset += shiftIndex;
+    newFooter.sectionOffset += shiftIndex;
+    newFooter.metaOffset += shiftIndex;
+    newFooter.expansionOffset = (newFooter.expansionOffset == 0) ? 0 : newFooter.expansionOffset + shiftIndex;
+    newFooter.stringPoolOffset += shiftIndex;
+
+    // Write footer
+    fwrite(&newFooter, 1, sizeof(BBFFooter), tmpBBF);
 
     // copy index
     fseek(sourceBBF, (long)indexStart, SEEK_SET);
@@ -680,7 +703,7 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
     {
         fclose(sourceBBF);
         fclose(tmpBBF);
-        fprintf(stderr, "[BBFMUX] Could not copy Index to TMPBBF\n");
+        fprintf(stderr, "[BBFCODEC] Could not copy Index to TMPBBF\n");
         return false;
     }
 
@@ -690,29 +713,9 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
     {
         fclose(sourceBBF);
         fclose(tmpBBF);
-        fprintf(stderr, "[BBFMUX] Could not copy header bytes to tmpBBF.\n");
+        fprintf(stderr, "[BBFCODEC] Could not copy header bytes to tmpBBF.\n");
         return false;
     }
-
-    int64_t shiftIndex = (int64_t)newIndexStart - (int64_t)indexStart;
-    int64_t shiftData = (int64_t)indexSize;
-
-    fseek(tmpBBF, (long)newHeader.footerOffset, SEEK_SET);
-    
-    BBFFooter newFooter;
-    fread(&newFooter, 1, sizeof(BBFFooter), tmpBBF);
-
-    // Shift offsets
-    // TODO: Alignment, maybe?
-    newFooter.assetOffset += shiftIndex;
-    newFooter.pageOffset += shiftIndex;
-    newFooter.sectionOffset += shiftIndex;
-    newFooter.metaOffset += shiftIndex;
-    newFooter.expansionOffset = 0;
-    newFooter.stringPoolOffset += shiftIndex;
-
-    fseek(tmpBBF, -((long)sizeof(BBFFooter)), SEEK_CUR);
-    fwrite(&newFooter, 1, sizeof(BBFFooter), tmpBBF);
 
     fseek(tmpBBF, (long)newFooter.assetOffset, SEEK_SET);
     BBFAsset assetBuffer[64];
@@ -727,7 +730,7 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
 
         if (readCount != assetBatch)
         {
-            fprintf(stderr, "[BBFMUX] Error patching assets.\n");
+            fprintf(stderr, "[BBFCODEC] Error patching assets.\n");
             fclose(sourceBBF);
             fclose(tmpBBF);
             remove(tmpPath);
@@ -754,12 +757,14 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
 
     if (rename("petrified.bbf.tmp", oPath) != 0)
     {
-        fprintf(stderr, "[BBFMUX] Could not rename temp file. Result is in 'petrified.bbf.tmp'\n");
+        fprintf(stderr, "[BBFCODEC] Could not rename temp file. Result is in 'petrified.bbf.tmp'\n");
         return false;
     }
 
     return true;
 }
+
+
 
 // READER FUNCTIONS
 
@@ -775,7 +780,7 @@ BBFReader::BBFReader(const char* iFile)
 
         if (this->hFile == INVALID_HANDLE_VALUE)
         {
-            fprintf(stderr, "[BBFMUX] Unable to open file %s\n", iFile);
+            fprintf(stderr, "[BBFCODEC] Unable to open file %s\n", iFile);
             return;
         }
 
@@ -789,7 +794,7 @@ BBFReader::BBFReader(const char* iFile)
 
         if (this->hMap == NULL)
         {
-            fprintf(stderr, "[BBFMUX] Failed to map file (CreateFileMapping)\n");
+            fprintf(stderr, "[BBFCODEC] Failed to map file (CreateFileMapping)\n");
             CloseHandle(this->hFile);
             return;
         }
@@ -797,7 +802,7 @@ BBFReader::BBFReader(const char* iFile)
         this->fileBuffer = (uint8_t*)MapViewOfFile(this->hMap, FILE_MAP_READ, 0, 0, 0);
         if (this->fileBuffer == NULL)
         {
-            fprintf(stderr, "[BBFMUX] Failed to map file (MapViewOfFile)\n");
+            fprintf(stderr, "[BBFCODEC] Failed to map file (MapViewOfFile)\n");
             CloseHandle(this->hMap);
             CloseHandle(this->hFile);
             return;
@@ -806,14 +811,14 @@ BBFReader::BBFReader(const char* iFile)
         this->fileDescriptor = open(iFile, O_RDONLY);
         if (this->fileDescriptor == -1)
         {
-            fprintf(stderr, "[BBFMUX] Unable to open file %s\n", iFile);
+            fprintf(stderr, "[BBFCODEC] Unable to open file %s\n", iFile);
             return;
         }
 
         struct stat fileStat;
         if (fstat(this->fileDescriptor, &fileStat) == -1)
         {
-            fprintf(stderr, "[BBFMUX] Unable to stat file\n");
+            fprintf(stderr, "[BBFCODEC] Unable to stat file\n");
             close(this->fileDescriptor);
             return;
         }
@@ -822,7 +827,7 @@ BBFReader::BBFReader(const char* iFile)
         void* fMap = mmap(NULL, this->fileSize, PROT_READ, MAP_PRIVATE, this->fileDescriptor, 0);
         if (fMap == MAP_FAILED)
         {
-            fprintf(stderr, "[BBFMUX] mmap failed\n");
+            fprintf(stderr, "[BBFCODEC] mmap failed\n");
             close(this->fileDescriptor);
             this->fileBuffer = nullptr;
             return;
@@ -833,7 +838,7 @@ BBFReader::BBFReader(const char* iFile)
 
     // if (!this->file)
     // {
-    //     printf("[BBFMUX] Unable to open file %s", iFile);
+    //     printf("[BBFCODEC] Unable to open file %s", iFile);
     //     return;
     // }
 
@@ -955,7 +960,7 @@ const char* BBFReader::getStringView(uint64_t strOffset)
 {
     if (!this->footerCache)
     {
-        printf("[BBFMUX] Cannot Access String Pool. Ensure File is opened.");
+        printf("[BBFCODEC] Cannot Access String Pool. Ensure File is opened.");
         return nullptr;
     }
 
@@ -999,7 +1004,7 @@ XXH128_hash_t BBFReader::computeAssetHash(const BBFAsset* assetView)
 
     if (!dataView)
     {
-        printf("[BBFMUX] ERROR: Asset data out of bounds");
+        printf("[BBFCODEC] ERROR: Asset data out of bounds");
         return {0,0};
     }
 
@@ -1011,7 +1016,7 @@ XXH128_hash_t BBFReader::computeAssetHash(uint8_t* assetTableView, int assetInde
     const BBFAsset* assetView = getAssetEntryView(assetTableView, assetIndex);
     if (!assetView)
     {
-        printf("[BBFMUX] ERROR: Unable to get pointer for asset %i", assetIndex);
+        printf("[BBFCODEC] ERROR: Unable to get pointer for asset %i", assetIndex);
         return {0,0};
     }
 
@@ -1019,7 +1024,7 @@ XXH128_hash_t BBFReader::computeAssetHash(uint8_t* assetTableView, int assetInde
 
     if (!dataView)
     {
-        printf("[BBFMUX] ERROR: Unable to calculate hash for asset %i", assetIndex);
+        printf("[BBFCODEC] ERROR: Unable to calculate hash for asset %i", assetIndex);
         return {0,0};
     }
 

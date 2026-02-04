@@ -60,7 +60,7 @@ char* readTxtFile(const char* fPath)
     if(!file)
     {
         // can't open file
-        printf("[BBFMUX] Unable to read text file: %s", fPath);
+        printf("[BBFMUX] Unable to read text file: %s\n", fPath);
         return 0;
     }
 
@@ -73,7 +73,7 @@ char* readTxtFile(const char* fPath)
 
     if (readSize != fileSize)
     {
-        printf("[BBFMUX] Unable to read text file: %s", fPath);
+        printf("[BBFMUX] Unable to read text file: %s\n", fPath);
         return 0;
     }
 
@@ -444,7 +444,7 @@ int main(int argc, char** argv)
             case val32("--header"):   cfg.info.showHeader = true; break;
             case val32("--footer"):   cfg.info.showFooter = true; break;
             case val32("--strings"):  cfg.info.showStringPool = true; break;
-            case val32("--offsets"):  cfg.info.showStringPool = true; break;
+            case val32("--offsets"):  cfg.info.showOffsets = true; break;
         }
     }
 
