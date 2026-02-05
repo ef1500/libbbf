@@ -36,7 +36,7 @@ class BBFBuilder
         bool addSection(const char* sectionName, uint64_t startIndex, const char* parentName = nullptr);
 
         bool finalize();
-        bool petrifyFile(const char* iPath, const char* oPath); // Petrify!
+        static bool petrifyFile(const char* iPath, const char* oPath); // Petrify!
 
         // Getters
         size_t getAssetCount() { if(!assetCount) {return 0;} return assetCount; }

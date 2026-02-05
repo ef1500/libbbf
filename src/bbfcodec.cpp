@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <cstring>
 
+#ifdef _WIN32
+    #include <windows.h>
+#endif
+
 // Macros to speed up media detection
 #define PACK4(a, b, c, d) ((uint32_t)((uint8_t)a) | ((uint32_t)((uint8_t)b) << 8) | ((uint32_t)((uint8_t)c) << 16) | ((uint32_t)((uint8_t)d) << 24))
 
@@ -755,11 +759,20 @@ bool BBFBuilder::petrifyFile(const char* iPath, const char* oPath)
     fclose(sourceBBF);
     fclose(tmpBBF);
 
-    if (rename("petrified.bbf.tmp", oPath) != 0)
-    {
-        fprintf(stderr, "[BBFCODEC] Could not rename temp file. Result is in 'petrified.bbf.tmp'\n");
-        return false;
-    }
+    #ifdef _WIN32
+        if (MoveFileEx("petrified.bbf.tmp", oPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED) == 0)
+        {
+            DWORD err = GetLastError();
+            fprintf(stderr, "[BBFCODEC] MoveFileEx failed. Error: %lu\n", err);
+            return false;
+        }
+    #else
+        if (rename("petrified.bbf.tmp", oPath) != 0)
+        {
+            fprintf(stderr, "[BBFCODEC] Could not rename temp file. Result is in 'petrified.bbf.tmp'\n");
+            return false;
+        }
+    #endif
 
     return true;
 }
