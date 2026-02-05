@@ -46,6 +46,8 @@ add_executable(bbfmux src/muxer/bbfmux.cpp)
 
 target_link_libraries(bbfmux PRIVATE libbbf)
 
+install(TARGETS bbfmux DESTINATION bin)
+
 if ( Catch2_FOUND )
 
     add_executable(bbfbench src/bench/bbfbench.cpp src/bench/miniz.c)
