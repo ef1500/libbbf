@@ -42,6 +42,17 @@ target_include_directories(libbbf_shared PUBLIC
 
 target_compile_definitions(libbbf_shared PRIVATE LIBBBF_EXPORT_SYMBOLS)
 
+set_target_properties(libbbf PROPERTIES PUBLIC_HEADER src/libbbf.h)
+set_target_properties(libbbf PROPERTIES VERSION ${PROJECT_VERSION})
+set_target_properties(libbbf PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})
+set_target_properties(libbbf_shared PROPERTIES VERSION ${PROJECT_VERSION})
+set_target_properties(libbbf_shared PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})
+
+install(TARGETS libbbf libbbf_shared
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
 add_executable(bbfmux src/muxer/bbfmux.cpp)
 
 target_link_libraries(bbfmux PRIVATE libbbf)
