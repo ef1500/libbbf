@@ -140,7 +140,7 @@ char** scanDir(const char* folder, uint64_t* count)
         {
             if(!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) 
             {
-                if(*count >= capacity) 
+                if(*count >= (long long unsigned int)capacity) 
                 {
                     capacity *= 2;
                     files = (char**)realloc(files, sizeof(char*) * capacity);
@@ -601,7 +601,7 @@ int main(int argc, char** argv)
         }
 
         bbfBuilder.finalize();
-        printf("Muxed %lu files to '%s'...\n", fileCount, cfg.muxer.outputFile);
+        printf("Muxed %llu files to '%s'...\n", (long long unsigned int)fileCount, cfg.muxer.outputFile);
 
         // Free
         fileItrator = 0;
@@ -816,7 +816,7 @@ int main(int argc, char** argv)
                 printf("[BBFMUX] Unable to read asset table.");
             }
 
-            printf("\n=== ASSET TABLE (%lu entries) ===\n", pFooter->assetCount);
+            printf("\n=== ASSET TABLE (%llu entries) ===\n", (long long unsigned int)pFooter->assetCount);
             printf("ID  | Hash (XXH3-128)                  | Offset      | Size     | Type\n");
             printf("----|----------------------------------|-------------|----------|-----\n");
 
@@ -830,7 +830,7 @@ int main(int argc, char** argv)
 
                 if (!asset)
                 {
-                    printf("[BBFMUX] Unable to read asset %lu", assetIterator);
+                    printf("[BBFMUX] Unable to read asset %llu", (long long unsigned int)assetIterator);
                     assetTable = nullptr;
                     pFooter = nullptr;
                     return 1;
@@ -855,7 +855,6 @@ int main(int argc, char** argv)
 
     if (cfg.mode == Config::PETRIFY)
     {
-        BBFBuilder bbfPetrifier(cfg.petrify.outputFile);
 
         if (!cfg.petrify.outputFile)
         {
@@ -864,7 +863,7 @@ int main(int argc, char** argv)
         }
 
         printf("[BBFMUX] Petrifying %s to %s...\n", cfg.bbfFolder, cfg.petrify.outputFile);
-        bool petSuccess = bbfPetrifier.petrifyFile(cfg.bbfFolder, cfg.petrify.outputFile);
+        bool petSuccess = BBFBuilder::petrifyFile(cfg.bbfFolder, cfg.petrify.outputFile);
         if (petSuccess)
         {
             printf("[BBFMUX] Success.\n");
@@ -1079,7 +1078,7 @@ int main(int argc, char** argv)
 
     if (cfg.mode == Config::EXTRACT)
     {
-        printf("Asset index: %llu\n", (unsigned long long)cfg.extract.assetIndex);
+        printf("Asset index: %llu\n", (unsigned long long int)cfg.extract.assetIndex);
         // open .bbf file
         BBFReader bbfReader(cfg.bbfFolder);
 
@@ -1105,7 +1104,7 @@ int main(int argc, char** argv)
                 printf("[BBFMUX] Unable to read asset table.\n");
             }
 
-            fprintf(hFile, "=== ASSET TABLE (%lu entries) ===\n", pFooter->assetCount);
+            fprintf(hFile, "=== ASSET TABLE (%llu entries) ===\n", (unsigned long long int)pFooter->assetCount);
             fprintf(hFile, "ID  | Hash (XXH3-128)                  | Offset      | Size     | Type\n");
             fprintf(hFile, "----|----------------------------------|-------------|----------|-----\n");
     
@@ -1116,7 +1115,7 @@ int main(int argc, char** argv)
 
                 if (!asset)
                 {
-                    printf("[BBFMUX] Unable to read asset %lu\n", assetIterator);
+                    printf("[BBFMUX] Unable to read asset %llu\n", (unsigned long long int)assetIterator);
                     assetTable = nullptr;
                     pFooter = nullptr;
                     return 1;
