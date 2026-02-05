@@ -58,7 +58,7 @@ Usage of the term "MUST" or "SHALL" indicate required elements.
 
 3.4 Layout (Petrified)
     Petrified BBF files move the data tables and footer to immedieately
-    follow the header. Readers SHOULD parse the entire file structure
+    follow the header. Readers SHOULD parse the entire header and footer
     with one initial block read of 280 bytes.
     
     For larger index sizes, readers SHOULD verify the footer hash 
