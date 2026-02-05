@@ -1,7 +1,7 @@
 File: SPECNOTE.TXT
 Title: BBF File Specification
-Version: 3.0
-Revised: 1/27/26
+Version: 3.0.1
+Revised: 2/5/26
 Author: EF1500
 
 1.0 Introduction
