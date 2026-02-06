@@ -329,7 +329,7 @@ Usage of the term "MUST" or "SHALL" indicate required elements.
     In non-petrified files, asset data MUST appear immediately after the
     header.
 
-    In petrified files, asset data MUST appear after the footer.
+    In petrified files, asset data MUST appear after the string table.
 
     Asset data SHOULD be aligned according to the alignment rules
     described in Section 3.2.
