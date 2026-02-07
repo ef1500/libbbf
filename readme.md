@@ -1,10 +1,20 @@
+<div align="center">
+
 # libbbf: Bound Book Format 
 
-![alt text](https://img.shields.io/badge/Format-BBF3-blue.svg)
-![alt text](https://img.shields.io/badge/License-MIT-green.svg)
 
-> [!WARNING]
-> **Official Source Notice: Please only download releases from this repository (ef1500/libbbf). External mirrors or forks may contain malware.**
+![Format](https://img.shields.io/badge/Format-BBFv3-blue.svg?style=flat-square&color=007ec6)
+![License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square&color=44cc11)
+
+<br/>
+
+[![Crates.io](https://img.shields.io/crates/v/boundbook?style=flat-square&logo=rust&color=orange)](https://crates.io/crates/boundbook)
+[![AUR](https://img.shields.io/aur/version/libbbf?style=flat-square&logo=arch-linux&color=blue)](https://aur.archlinux.org/packages/libbbf)
+[![openSUSE](https://img.shields.io/badge/openSUSE%20Package-64b42d?style=flat-square&logo=opensuse&logoColor=white)](https://build.opensuse.org/package/show/Publishing/libbbf)
+[![PyPI](https://img.shields.io/pypi/v/libbbf?style=flat-square&logo=python&logoColor=white&color=3776ab)](https://pypi.org/project/libbbf/)
+
+</div>
+
 ---
 Bound Book Format (.bbf) is a binary container format intended for the ordered storage of page-based media assets. BBF was designed principally for comics, manga, artbooks, and similar sequential image collections. 
 
@@ -65,7 +75,7 @@ BBF files are footer-indexed, and the footer can be at either after the header (
 
 | Capability | **BBF v3 (libbbf)** | CBZ (ZIP) | CBR (RAR) | PDF | EPUB | Folder |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Memory-mapped parsing** | ✅ | ✅ [A] | ✅ [B] | ⚠️ [C] |  ✅ [A][D] | ✅ |
+| **Memory-mapped parsing** | ✅ | ✅ [A] | ✅ [B] | ✅ [C] |  ✅ [A][D] | ✅ |
 | **Adjustable alignment** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Variable alignment (size-based packing)** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Content-hash deduplication** | ✅ | ❌ | ❌ | ⚠️ [E] | ⚠️ [F] | ⚠️ [G] |
@@ -80,7 +90,7 @@ BBF files are footer-indexed, and the footer can be at either after the header (
 <sub>
 [A] Only in STORE mode, which CBZ is typically in.<br/>
 [B] Only in STORE mode, which CBR is typically in.<br/>
-[C] PDFs often store page content/images in filtered (compressed) streams; mmap helps parsing, not "direct page bytes".<br/>
+[C] PDFs often store page content/images in filtered (compressed) streams; mmap helps parsing.<br/>
 [D] EPUB is a ZIP-based container with additional rules; it inherits ZIP's container properties.<br/>
 [E] PDF can reuse already-stored objects/resources by reference, but there is no hash-based deduplication mechanism.<br/>
 [F] EPUB can reference the same resource from multiple content documents (file-level reuse), but does not have hash-based a deduplication mechanism.<br/>
@@ -109,11 +119,9 @@ BBF files are footer-indexed, and the footer can be at either after the header (
 
 
 ### Graphical Comparison (BBF vs. CBZ)
-
 A graphical representation of `bbfbench` is given below. To verify (or to see BBF's performance metrics on your particular system), use the bbfbench program provided in `./src/bench/`.
 
-<img width="5400" height="1800" alt="bbf_vs_cbz_benchmark" src="https://github.com/user-attachments/assets/91c43861-6d39-4bdf-86d0-f4e0d3850170">
-
+<img width="100%" alt="bbf_vs_cbz_benchmark" src="https://github.com/user-attachments/assets/91c43861-6d39-4bdf-86d0-f4e0d3850170">
 
 ---
 
@@ -123,17 +131,17 @@ A graphical representation of `bbfbench` is given below. To verify (or to see BB
 Libbbf uses memory mapping to load files into memory and read them quickly.
 
 ### Adjustable Alignment (Ream Size)
-You can adjust the alignment between assets.
+You can adjust the alignment between assets. The default alignment is $2^{12}$ (4096 bytes).
 
 ### Deduplication
-Libbbf deduplicates assets using `XXH3-128`, and stores the asset hash for future
+Libbbf deduplicates assets using `XXH128`, and stores the asset hash for future
 verification purposes.
 
 ### XXH3-64 Footer Checksum
 Libbbf uses an XXH3-64 hash to checksum the asset, page, and string tables.
 
 ### Linearization (Petrification)
-For those self-hosting, BBF can relocate the index and footer to immediately follow the header. This allows readers to parse the entire file structure with a single initial block read.
+For those self-hosting, BBF can relocate the index and footer to immediately follow the header. This allows readers to parse the header and footer with a single initial block read of 280 bytes. 
 
 ### Arbitrary Metadata
 Libbbf supports arbitrary key:value pairs with optional parent labels (key:value\[:parent\]).
@@ -154,7 +162,7 @@ BBF files support power-of-two alignment (up to 2^16). To minimize internal frag
 
 ## CLI Usage: `bbfmux`
 
-The included `bbfmux` tool is a reference implementation for creating and managing BBF files.
+The included `bbfmux` tool is a reference implementation for muxing/demuxing BBF files.
 
 ```bash
 ========[ BBFMUX v3.0 ]====================================================
@@ -231,22 +239,22 @@ bbfmux ./manga_folder/ \
 ```
 
 ### Verify Integrity
-Scan the archive for data corruption. BBF uses **[XXH3_128](https://github.com/Cyan4973/xxHash)** hashes to verify every individual image payload.
+Scan the archive for data corruption. BBF uses **[XXH128](https://github.com/Cyan4973/xxHash)** hashes to verify every individual image payload.
 ```bash
 bbfmux input.bbf --verify
 ```
 
 ### Extract Data
-Extract the entire book, a specific volume, or a single chapter by using the `--extract` option.
+Extract the entire book, use the `--extract` option with `--asset=-1`. To extract a specific volume, or a single chapter by using the `--extract` option with `--rangekey`.
 
 **Extract a specific section:**
 ```bash
-bbfmux input.bbf --extract --section="Volume 1" --outdir="./Volume1"
+bbfmux input.bbf --extract --section="Volume 1" --rangekey="Volume 1" --outdir="./Volume1"
 ```
 
 **Extract the entire book:**
 ```bash
-bbfmux input.bbf --extract --outdir="./unpacked_book"
+bbfmux input.bbf --extract --asset=-1 --outdir="./unpacked_book"
 ```
 
 ### View Metadata & Structure
@@ -262,7 +270,7 @@ bbfmux input_book.bbf --info --header --footer --metadata --sections
 `bbfmux` also supports more advanced options, allowing full-control over your `.bbf` files.
 
 ### Batch Section Import (`--sections`)
-Sections define Chapters or Volumes. You can target a page by its index or filename.
+Sections define Chapters, Volumes or other custom labels. You can target a page by its filename.
 ```bash
 # Target by filename
 bbfmux ./folder/ --section="Chapter 1":"001.png" out.bbf
@@ -277,7 +285,7 @@ bbfmux ./folder/ --sections=sectionexample.txt out.bbf
 ```
 
 ### Targeted Verification
-BBF allows for verification of data to detect bit-rot.
+BBF allows for verification of data to detect data corruption.
 ```bash
 # Verify everything (All assets and Directory structure)
 bbfmux input.bbf --verify
@@ -290,7 +298,7 @@ bbfmux input.bbf --verify --section="Volume 1"
 ```
 
 ### Range-Key Extraction
-The `--rangekey` option allows you to extract a range of sections. The extractor starts at the specified `--section` and stops when it finds a section whose title matches the `rangekey`.
+The `--rangekey` option allows you to extract a range of sections. The extractor starts at the specified `--section` and stops when it finds a section whose title contains a substring specified by `--rangekey`.
 
 ```bash
 # Extract Chapter 2 up until it hits Chapter 4
