@@ -18,7 +18,9 @@
 ---
 Bound Book Format (.bbf) is a binary container format intended for the ordered storage of page-based media assets. BBF was designed principally for comics, manga, artbooks, and similar sequential image collections. 
 
-Bound Book Format additionally enables paginated retrival, asset deduplication, fast indexed access to page order and metadata, and MKV-like sectioning.
+Bound Book Format additionally enables paginated retrival, asset deduplication, fast indexed access to page order and metadata, and MKV-like sectioning. 
+
+BBF is most suited for the sharing, reading, archival and streaming of completed volumes, collections of media, or series (as opposed to ongoing works). 
 
 ---
 
@@ -141,7 +143,7 @@ verification purposes.
 Libbbf uses an XXH3-64 hash to checksum the asset, page, and string tables.
 
 ### Linearization (Petrification)
-For those self-hosting, BBF can relocate the index and footer to immediately follow the header. This allows readers to parse the header and footer with a single initial block read of 280 bytes. 
+For those self-hosting, BBF can relocate the index and footer to immediately follow the header. This allows readers to parse the header and footer with a single initial block read of 320 bytes. 
 
 ### Arbitrary Metadata
 Libbbf supports arbitrary key:value pairs with optional parent labels (key:value\[:parent\]).
