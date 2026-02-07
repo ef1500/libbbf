@@ -1078,7 +1078,6 @@ int main(int argc, char** argv)
 
     if (cfg.mode == Config::EXTRACT)
     {
-        printf("Asset index: %llu\n", (unsigned long long int)cfg.extract.assetIndex);
         // open .bbf file
         BBFReader bbfReader(cfg.bbfFolder);
 
@@ -1191,7 +1190,7 @@ int main(int argc, char** argv)
             fclose(mFile);
         }
 
-        if (cfg.extract.assetIndex != 0xFFFFFFFFFFFFFFFF)
+        if (cfg.extract.assetIndex != 0xFFFFFFFFFFFFFFFF && !cfg.extract.sectionName)
         {
 
             if (cfg.extract.assetIndex >= pFooter->assetCount)
@@ -1242,7 +1241,7 @@ int main(int argc, char** argv)
                 printf("[BBFMUX] Failed to write file: %s\n", filePath);
             }
         }
-        else
+        else if (cfg.extract.assetIndex == 0xFFFFFFFFFFFFFFFF && !cfg.extract.sectionName)
         {
             uint64_t pages = pFooter->pageCount;
             uint64_t pageIteratork = 0;
@@ -1296,7 +1295,7 @@ int main(int argc, char** argv)
             // Extract using a rangekey.
             const uint8_t* sectionTable = bbfReader.getSectionTableView(pFooter->sectionOffset);
 
-            BBFSection* tSection = nullptr;
+            // BBFSection* tSection = nullptr;
             uint64_t startPage = 0;
             uint64_t endPage = pFooter->pageCount;
 
@@ -1306,7 +1305,7 @@ int main(int argc, char** argv)
                 const BBFSection* sec = bbfReader.getSectionEntryView((uint8_t*)sectionTable, yIterator);
                 const char* name = bbfReader.getStringView(sec->sectionTitleOffset);
 
-                if (name && strstr(name, cfg.extract.sectionName) == 0)
+                if (strstr(name, cfg.extract.sectionName) != nullptr)
                 {
                     uint64_t kIterator = yIterator + 1;
                     for (; kIterator < pFooter->sectionCount; kIterator++)
@@ -1322,6 +1321,7 @@ int main(int argc, char** argv)
                         if (!isChild)
                         {
                             endPage = nextSec->sectionStartIndex;
+                            startPage = sec->sectionStartIndex;
                             break;
                         }
                     }
@@ -1329,11 +1329,11 @@ int main(int argc, char** argv)
                 }
             }
 
-            if (!tSection) 
-            {
-                printf("[BBFMUX] Section '%s' not found.\n", cfg.extract.sectionName);
-                return 1;
-            }
+            // if (!tSection) 
+            // {
+            //     printf("[BBFMUX] Section '%s' not found.\n", cfg.extract.sectionName);
+            //     return 1;
+            // }
 
             printf("[BBFMUX] Extracting Section '%s' (Pages %" PRIu64 " - %" PRIu64 ")\n", cfg.extract.sectionName, startPage, endPage - 1);
 
